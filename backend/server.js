@@ -324,6 +324,7 @@ app.post('/billing/create-checkout', auth, async (req, res) => {
   if (!stripe) return res.status(503).json({ error: 'Billing not configured' });
   const { plan } = req.body || {};
   const priceMap = {
+    starter: process.env.STRIPE_PRICE_STARTER,
     pro: process.env.STRIPE_PRICE_PRO,
     enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
   };
@@ -366,6 +367,7 @@ app.post('/billing/create-checkout', auth, async (req, res) => {
   if (!stripe) return res.status(503).json({ error: 'Billing not configured' });
   const { plan } = req.body || {};
   const priceMap = {
+    starter: process.env.STRIPE_PRICE_STARTER,
     pro: process.env.STRIPE_PRICE_PRO,
     enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
   };

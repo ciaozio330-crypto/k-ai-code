@@ -10,9 +10,9 @@ const EXAMPLES = [
 ];
 
 const PLANS = [
-  { id: 'starter', name: 'Starter', price: '14,99 EUR', limit: 60, desc: '60 richieste al mese. Per iniziare.' },
-  { id: 'pro', name: 'Pro', price: '39,99 EUR', limit: 300, desc: '300 richieste al mese. Per team piccoli.' },
-  { id: 'enterprise', name: 'Enterprise', price: '149,99 EUR', limit: 1200, desc: '1.200 richieste/mese (fair use). Per network.' },
+  { id: 'starter', name: 'Starter', price: '15 EUR', limit: 60, desc: '60 richieste al mese. Per iniziare.' },
+  { id: 'pro', name: 'Pro', price: '60 EUR', limit: 300, desc: '300 richieste al mese. Per team piccoli.' },
+  { id: 'enterprise', name: 'Enterprise', price: '140 EUR', limit: 1200, desc: '1.200 richieste/mese (fair use). Per network.' },
 ];
 
 const I = {
@@ -200,7 +200,6 @@ function UsageView({ user, onUpgrade }) {
   const pct = Math.min((user.queries_used / user.queries_limit) * 100, 100);
   const left = Math.max(user.queries_limit - user.queries_used, 0);
   const cur = PLANS.find((p) => p.id === user.plan) || PLANS[0];
-  const next = user.plan === 'starter' ? 'pro' : 'enterprise';
   return (
     <div className="usage-view">
       <div className="u-top">
@@ -233,27 +232,30 @@ function UsageView({ user, onUpgrade }) {
           </div>
         </div>
 
-        <div className="plan-row">
-          <div className="plans">
-            <div className="h">Piani</div>
-            {PLANS.map((p) => (
-              <div className={`plan-line ${p.id === user.plan ? 'cur' : ''}`} key={p.id}>
-                <span className="pn">{p.name}</span>
-                <span className="pd">{p.desc}</span>
-                {p.id === user.plan && <span className="badge-cur">Attivo</span>}
-                <span className="pp">{p.price}</span>
+        <div className="plans-h">Scegli il tuo piano</div>
+        <div className="plan-grid">
+          {PLANS.map((p) => {
+            const isCur = p.id === user.plan;
+            const feat = p.id === 'starter'
+              ? ['60 richieste / mese', 'Modello Fable 5', 'Cronologia chat']
+              : p.id === 'pro'
+              ? ['300 richieste / mese', 'Modello Fable 5', 'Supporto prioritario']
+              : ['1.200 richieste / mese', 'Modello Fable 5', 'Fair use per network'];
+            return (
+              <div className={`plan-tile ${isCur ? 'cur' : ''} ${p.id === 'pro' ? 'featured' : ''}`} key={p.id}>
+                {p.id === 'pro' && <span className="plan-flag">Consigliato</span>}
+                <div className="pt-name">{p.name}</div>
+                <div className="pt-price"><b>{p.price.replace(' EUR', '')}</b><span>€ / mese</span></div>
+                <div className="pt-desc">{p.desc}</div>
+                <ul className="pt-feats">
+                  {feat.map((f) => <li key={f}>{f}</li>)}
+                </ul>
+                {isCur
+                  ? <button className="pt-btn cur" disabled>Piano attuale</button>
+                  : <button className="pt-btn" onClick={() => onUpgrade(p.id)}>Passa a {p.name}</button>}
               </div>
-            ))}
-          </div>
-          <div className="plan-card">
-            <div className="name">{cur.name}</div>
-            <div className="desc">{cur.desc}</div>
-            <div className="price"><b>{cur.price}</b><span>/ mese</span></div>
-            <div className="acts">
-              {user.plan !== 'enterprise' && <button className="primary" onClick={() => onUpgrade(next)}>Fai upgrade</button>}
-              <button className="ghost" onClick={() => onUpgrade(next)}>Cambia piano</button>
-            </div>
-          </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -299,13 +301,20 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onUpgrade, onDeleteAcc
                 <textarea className="set-ta" value={prefs.instructions || ''} placeholder="Es: codice per Paper 1.21, commenti in italiano." onChange={(e) => set({ instructions: e.target.value })} />
               </div>
 
-              <div className="set-sec-h" style={{ marginTop: 10 }}>Preferenze</div>
-              <div className="frow"><div className="flabel">Aspetto</div>
-                <div className="seg-icons">
-                  <button className={(prefs.theme || 'system') === 'system' ? 'on' : ''} onClick={() => set({ theme: 'system' })} title="Sistema">{I.monitor}</button>
-                  <button className={prefs.theme === 'light' ? 'on' : ''} onClick={() => set({ theme: 'light' })} title="Chiaro">{I.sun}</button>
-                  <button className={prefs.theme === 'dark' ? 'on' : ''} onClick={() => set({ theme: 'dark' })} title="Scuro">{I.moon}</button>
-                </div>
+              <div className="set-sec-h" style={{ marginTop: 10 }}>Tema</div>
+              <div className="fhelp" style={{ marginTop: -6 }}>Scegli l'aspetto dell'interfaccia.</div>
+              <div className="theme-picker">
+                {[
+                  ['elegant', 'Elegante scuro', 'Raffinato e minimale', ['#12151c', '#5ad6c0', '#e6ad55']],
+                  ['vivid', 'Moderno colorato', 'Accenti vivaci, chiaro', ['#f6f4ef', '#0d9488', '#7c5cff']],
+                  ['terminal', 'Tech / Terminale', 'Mono, da sviluppatori', ['#0a0f0c', '#3ff0a0', '#1f9d63']],
+                ].map(([id, name, desc, sw]) => (
+                  <button key={id} className={`theme-card ${(prefs.flavor || 'elegant') === id ? 'on' : ''}`} onClick={() => set({ flavor: id })}>
+                    <div className="tc-swatch">{sw.map((c, i) => <span key={i} style={{ background: c }} />)}</div>
+                    <div className="tc-meta"><span className="tc-name">{name}</span><span className="tc-desc">{desc}</span></div>
+                    <span className="tc-check">{(prefs.flavor || 'elegant') === id ? '✓' : ''}</span>
+                  </button>
+                ))}
               </div>
               <div className="frow"><div className="flabel">Carattere della chat</div>
                 <select className="fselect" value={prefs.font || 'system'} onChange={(e) => set({ font: e.target.value })}>
@@ -329,7 +338,7 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onUpgrade, onDeleteAcc
                 <div className="lead"><span className="lt">Fatturazione</span><span className="ld">Piano e pagamento.</span></div>
                 <div className="kv"><span className="k2">Piano</span><span className="v2">{user.plan}</span></div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {user.plan !== 'enterprise' && <button className="btn-ink" onClick={() => onUpgrade(user.plan === 'starter' ? 'pro' : 'enterprise')}>Fai upgrade</button>}
+                  <button className="btn-ink" onClick={onGoUsage}>Scegli / cambia piano</button>
                   <button className="btn-line" onClick={onGoUsage}>Vedi uso</button>
                 </div>
               </div>
@@ -390,17 +399,19 @@ function Chat({ token, onLogout }) {
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState('chat');
   const [prefs, setPrefsState] = useState(() => {
-    const def = { style: 'bilanciato', lang: 'it', instructions: '', name: '', callme: '', work: '', theme: 'system', font: 'system' };
+    const def = { style: 'bilanciato', lang: 'it', instructions: '', name: '', callme: '', work: '', flavor: 'elegant', font: 'system' };
     try { return { ...def, ...JSON.parse(localStorage.getItem('kai_prefs') || '{}') }; }
     catch { return def; }
   });
   const setPrefs = (p) => { setPrefsState(p); localStorage.setItem('kai_prefs', JSON.stringify(p)); };
   useEffect(() => {
-    const t = prefs.theme || 'system';
-    const dark = t === 'dark' || (t === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.classList.toggle('dark', dark);
-    document.documentElement.classList.toggle('font-mono', prefs.font === 'mono');
-  }, [prefs.theme, prefs.font]);
+    const flavor = prefs.flavor || 'elegant';
+    const root = document.documentElement;
+    root.classList.remove('theme-elegant', 'theme-vivid', 'theme-terminal', 'dark');
+    root.classList.add('theme-' + flavor);
+    if (flavor === 'elegant' || flavor === 'terminal') root.classList.add('dark');
+    root.classList.toggle('font-mono', prefs.font === 'mono' || flavor === 'terminal');
+  }, [prefs.flavor, prefs.font]);
   const endRef = useRef(null);
   const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
