@@ -361,8 +361,37 @@ app.delete('/account', auth, (req, res) => {
   res.json({ deleted: true });
 });
 
+// ---------- Billing checkout ----------
+app.post('/billing/create-checkout', auth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Billing not configured' });
+  const { plan } = req.body || {};
+  const priceMap = {
+    pro: process.env.STRIPE_PRICE_PRO,
+    enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
+  };
+  if (!priceMap[plan]) return res.status(400).json({ error: 'Invalid plan' });
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  try {
+    let customerId = user.stripe_customer_id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({ email: user.email, metadata: { user_id: user.id } });
+      customerId = customer.id;
+      db.prepare('UPDATE users SET stripe_customer_id = ? WHERE id = ?').run(customerId, user.id);
+    }
+    const checkout = await stripe.checkout.sessions.create({
+      customer: customerId,
+      line_items: [{ price: priceMap[plan], quantity: 1 }],
+      mode: 'subscription',
+      success_url: `${process.env.FRONTEND_URL}/?billing=success`,
+      cancel_url: `${process.env.FRONTEND_URL}/?billing=cancel`,
+    });
+    res.json({ url: checkout.url });
+  } catch (err) {
+    console.error('Billing error:', err);
+    res.status(500).json({ error: 'Billing error' });
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`K AI Code backend on :${PORT} (model ${MODEL})`));
-
-import billingRouter from './routes/billing.js';
-app.use('/billing', billingRouter);
