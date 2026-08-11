@@ -278,7 +278,7 @@ html.dark .danger { border-color: #5a2f2a; color: #ff8a7d; }
 html.dark .danger:hover { background: #221816; }
 
 /* ---- finestre modali sovrapposte ---- */
-.modal-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(22,24,28,0.32); backdrop-filter: blur(3px); animation: bd-in .18s ease; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(22,24,28,0.42); animation: bd-in .18s ease; }
 @keyframes bd-in { from { opacity: 0; } to { opacity: 1; } }
 .modal-window { position: relative; width: min(1040px, 94vw); height: min(720px, 88vh); background: var(--white); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; box-shadow: 0 40px 120px -34px rgba(22,24,28,0.55); animation: mw-in .22s cubic-bezier(.2,.8,.2,1); }
 @keyframes mw-in { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
@@ -463,7 +463,6 @@ html.theme-terminal .plan-flag { background: #3ff0a0; color: #071b0f; }
 .rail .ico:hover { color: var(--ink); background: var(--active); }
 .new-btn:hover, .btn-ink:hover, .send:hover { transform: translateY(-1px); }
 .set-nav .item:hover { background: var(--active); }
-.plan-tile, .theme-card, .stat-grid, .modal-window { will-change: transform; }
 .stat { transition: background .16s; }
 .stat-grid:hover .stat { background: var(--panel); }
 .stat-grid .stat:hover { background: var(--active); }
