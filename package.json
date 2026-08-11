@@ -1,7 +1,4 @@
 {
   "name": "k-ai-code",
-  "private": true,
-  "scripts": {
-    "build:frontend": "cd frontend && npm install && npm run build"
-  }
+  "private": true
 }
