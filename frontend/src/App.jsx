@@ -449,10 +449,14 @@ function Chat({ token, onLogout }) {
   };
 
   const upgrade = async (plan) => {
-    const res = await fetch(`${API}/billing/create-checkout`, { method: 'POST', headers: H, body: JSON.stringify({ plan }) });
-    const data = await res.json();
-    if (data.url) window.location.href = data.url;
-    else alert('I pagamenti non sono ancora configurati (Stripe).');
+    try {
+      const res = await fetch(`${API}/billing/create-checkout`, { method: 'POST', headers: H, body: JSON.stringify({ plan }) });
+      const data = await res.json();
+      if (data.url) { window.location.href = data.url; return; }
+      alert('Errore Stripe (' + res.status + '): ' + (data.error || 'sconosciuto'));
+    } catch (e) {
+      alert('Errore di connessione: ' + e.message);
+    }
   };
 
   const deleteAccount = async () => {
