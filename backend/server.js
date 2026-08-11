@@ -364,5 +364,5 @@ app.delete('/account', auth, (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`K AI Code backend on :${PORT} (model ${MODEL})`));
 
-const billingRouter = require('./routes/billing');
+import billingRouter from './routes/billing.js';
 app.use('/billing', billingRouter);

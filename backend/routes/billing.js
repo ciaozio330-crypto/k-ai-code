@@ -1,8 +1,9 @@
-const express = require('express');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const db = require('../db');
-const { authenticateToken } = require('../middleware');
+import express from 'express';
+import Stripe from 'stripe';
+import db from '../db.js';
+import { authenticateToken } from '../middleware.js';
 
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const router = express.Router();
 
 const PLAN_PRICES = {
@@ -63,4 +64,4 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   }
 });
 
-module.exports = router;
+export default router;
