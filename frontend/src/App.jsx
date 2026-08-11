@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
 
-const API = import.meta.env.VITE_API_URL || 'https://k-ai-code.onrender.com';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const EXAMPLES = [
   'Porta questo plugin da Spigot a Paper 1.21',
