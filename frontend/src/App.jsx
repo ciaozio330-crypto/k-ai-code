@@ -537,7 +537,7 @@ function Chat({ token, onLogout }) {
     <div className="app">
       <div className="shell">
         <div className="rail">
-          <div className="mono-k">K</div>
+          <div className="mono-k"><img src="/k-logo.png" alt="K AI Code" /></div>
           <div className="nav">
             <button className={`ico ${view === 'chat' ? 'active' : ''}`} onClick={() => setView('chat')}>{I.chat}</button>
             <button className={`ico ${view === 'usage' ? 'active' : ''}`} onClick={() => setView('usage')}>{I.chart}</button>
