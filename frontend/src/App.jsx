@@ -10,6 +10,7 @@ const EXAMPLES = [
 ];
 
 const PLANS = [
+  { id: 'free', name: 'Free', price: '0 EUR', limit: 10, desc: '10 richieste al mese. Per provare.' },
   { id: 'starter', name: 'Starter', price: '15 EUR', limit: 60, desc: '60 richieste al mese. Per iniziare.' },
   { id: 'pro', name: 'Pro', price: '60 EUR', limit: 300, desc: '300 richieste al mese. Per team piccoli.' },
   { id: 'enterprise', name: 'Enterprise', price: '140 EUR', limit: 1200, desc: '1.200 richieste/mese (fair use). Per network.' },
@@ -228,7 +229,7 @@ function UsageView({ user, onUpgrade }) {
           <div className="stat">
             <span className="lbl">Piano</span>
             <span className="num" style={{ fontSize: 26 }}>{cur.name}</span>
-            <span className="cap">{cur.price} / mese</span>
+            <span className="cap">{cur.id === 'free' ? 'Gratis' : cur.price + ' / mese'}</span>
           </div>
         </div>
 
@@ -236,7 +237,9 @@ function UsageView({ user, onUpgrade }) {
         <div className="plan-grid">
           {PLANS.map((p) => {
             const isCur = p.id === user.plan;
-            const feat = p.id === 'starter'
+            const feat = p.id === 'free'
+              ? ['10 richieste / mese', 'Modello Fable 5', 'Per provare il servizio']
+              : p.id === 'starter'
               ? ['60 richieste / mese', 'Modello Fable 5', 'Cronologia chat']
               : p.id === 'pro'
               ? ['300 richieste / mese', 'Modello Fable 5', 'Supporto prioritario']
@@ -245,12 +248,16 @@ function UsageView({ user, onUpgrade }) {
               <div className={`plan-tile ${isCur ? 'cur' : ''} ${p.id === 'pro' ? 'featured' : ''}`} key={p.id}>
                 {p.id === 'pro' && <span className="plan-flag">Consigliato</span>}
                 <div className="pt-name">{p.name}</div>
-                <div className="pt-price"><b>{p.price.replace(' EUR', '')}</b><span>€ / mese</span></div>
+                {p.id === 'free'
+                  ? <div className="pt-price"><b>Gratis</b></div>
+                  : <div className="pt-price"><b>{p.price.replace(' EUR', '')}</b><span>€ / mese</span></div>}
                 <div className="pt-desc">{p.desc}</div>
                 <ul className="pt-feats">
                   {feat.map((f) => <li key={f}>{f}</li>)}
                 </ul>
-                {isCur
+                {p.id === 'free'
+                  ? <button className="pt-btn cur" disabled>{isCur ? 'Piano attuale' : 'Piano base gratuito'}</button>
+                  : isCur
                   ? <button className="pt-btn cur" disabled>Piano attuale</button>
                   : <button className="pt-btn" onClick={() => onUpgrade(p.id)}>Passa a {p.name}</button>}
               </div>
@@ -567,7 +574,7 @@ function Chat({ token, onLogout }) {
               <div className="usage-row"><span>Uso ({user.plan})</span><b>{user.queries_used}/{user.queries_limit}</b></div>
               <div className={`usage-bar ${pct > 80 ? 'warn' : ''}`}><div style={{ width: `${pct}%` }} /></div>
               {user.queries_used >= user.queries_limit &&
-                <button className="upg" onClick={() => upgrade(user.plan === 'starter' ? 'pro' : 'enterprise')}>Fai upgrade</button>}
+                <button className="upg" onClick={() => setView('usage')}>Fai upgrade</button>}
             </>)}
             <button className="logout" onClick={onLogout}>Esci</button>
           </div>

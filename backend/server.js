@@ -34,7 +34,7 @@ app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), (req, re
       [process.env.STRIPE_PRICE_ENTERPRISE]: 'enterprise',
     };
     const plan = planMap[priceId] || 'starter';
-    const limits = { starter: 60, pro: 300, enterprise: 1200 };
+    const limits = { free: 10, starter: 60, pro: 300, enterprise: 1200 };
     db.prepare('UPDATE users SET plan = ?, queries_limit = ?, queries_used = 0 WHERE stripe_customer_id = ?')
       .run(plan, limits[plan], sub.customer);
   }
@@ -42,7 +42,7 @@ app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), (req, re
   if (event.type === 'customer.subscription.deleted') {
     const sub = event.data.object;
     db.prepare('UPDATE users SET plan = ?, queries_limit = ? WHERE stripe_customer_id = ?')
-      .run('starter', 60, sub.customer);
+      .run('free', 10, sub.customer);
   }
 
   res.json({ received: true });
@@ -87,9 +87,9 @@ db.exec(`
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    plan TEXT DEFAULT 'starter',
+    plan TEXT DEFAULT 'free',
     queries_used INTEGER DEFAULT 0,
-    queries_limit INTEGER DEFAULT 60,
+    queries_limit INTEGER DEFAULT 10,
     stripe_customer_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -165,7 +165,7 @@ app.post('/auth/signup', (req, res) => {
   if (existing) return res.status(400).json({ error: 'User already exists' });
   const id = randomUUID();
   const hash = bcrypt.hashSync(password, 10);
-  db.prepare('INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)').run(id, email, hash);
+  db.prepare('INSERT INTO users (id, email, password_hash, plan, queries_limit) VALUES (?, ?, ?, ?, ?)').run(id, email, hash, 'free', 10);
   const token = jwt.sign({ id, email }, JWT_SECRET, { expiresIn: '30d' });
   res.json({ token });
 });
@@ -206,7 +206,7 @@ app.post('/auth/register/verify', (req, res) => {
   const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (existing) return res.status(409).json({ error: 'Email gia registrata' });
   const id = randomUUID();
-  db.prepare('INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)').run(id, email, row.password_hash);
+  db.prepare('INSERT INTO users (id, email, password_hash, plan, queries_limit) VALUES (?, ?, ?, ?, ?)').run(id, email, row.password_hash, 'free', 10);
   db.prepare('DELETE FROM email_codes WHERE email = ? AND purpose = ?').run(email, 'register');
   const token = jwt.sign({ id, email }, JWT_SECRET, { expiresIn: '30d' });
   res.json({ token });
