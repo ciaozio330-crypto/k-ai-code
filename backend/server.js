@@ -299,11 +299,13 @@ app.post('/api/chat', auth, async (req, res) => {
 
     let reply = '';
     if (response.content && response.content.length > 0) {
-      const firstContent = response.content[0];
-      if (firstContent.type === 'text') {
-        reply = firstContent.text;
+      // Cerca il primo block di tipo 'text' (potrebbe avere thinking blocks prima)
+      const textBlock = response.content.find(block => block.type === 'text');
+      if (textBlock) {
+        reply = textBlock.text;
       } else {
-        reply = JSON.stringify(firstContent); // fallback: mostra cosa è arrivato
+        // Se non c'è un block di testo, mostra i tipi disponibili per debug
+        reply = `(Risposta ricevuta ma senza testo. Tipi: ${response.content.map(b => b.type).join(', ')})`;
       }
     } else {
       reply = '(nessun contenuto nella risposta)';
