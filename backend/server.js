@@ -170,15 +170,28 @@ app.post('/auth/signup', (req, res) => {
   res.json({ token });
 });
 
-app.post('/auth/login', (req, res) => {
+const loginHandler = (req, res) => {
   const { email, password } = req.body || {};
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
-  res.json({ token });
-});
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.email.split('@')[0],
+      plan: user.plan,
+      queriesUsed: user.queries_used,
+      queriesLimit: user.queries_limit,
+    },
+  });
+};
+
+app.post('/auth/login', loginHandler);
+app.post('/api/auth/login', loginHandler);
 
 // ---------- Auth con verifica email (2 passi) ----------
 // Registrazione: passo 1 - invia codice
@@ -248,7 +261,55 @@ app.get('/user/profile', auth, (req, res) => {
   res.json(user);
 });
 
-// ---------- Chat ----------
+// Alias per CLI: restituisce i dati dell'utente autenticato
+app.get('/api/me', auth, (req, res) => {
+  const user = db.prepare('SELECT id, email, plan, queries_used, queries_limit FROM users WHERE id = ?')
+    .get(req.user.id);
+  if (!user) return res.sendStatus(404);
+  res.json({
+    id: user.id,
+    email: user.email,
+    username: user.email.split('@')[0],
+    plan: user.plan,
+    queriesUsed: user.queries_used,
+    queriesLimit: user.queries_limit,
+  });
+});
+
+// ---------- Chat (CLI endpoint - senza salvare sessione) ----------
+// POST /api/chat: per la CLI, non salva la sessione, restituisce direttamente la risposta
+app.post('/api/chat', auth, async (req, res) => {
+  const { messages } = req.body || {};
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'messages array required' });
+  }
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  if (user.queries_used >= user.queries_limit) {
+    return res.status(402).json({ error: 'Limite di richieste raggiunto. Fai upgrade del piano.' });
+  }
+
+  try {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      system: SYSTEM_PROMPT,
+      messages: messages,
+    });
+
+    const reply = response.content[0]?.type === 'text' ? response.content[0].text : '';
+    
+    // Incrementa il contatore di richieste
+    db.prepare('UPDATE users SET queries_used = queries_used + 1 WHERE id = ?').run(req.user.id);
+
+    res.json({ reply, user: { plan: user.plan, queriesUsed: user.queries_used + 1, queriesLimit: user.queries_limit } });
+  } catch (err) {
+    console.error('Chat error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------- Chat (Web app endpoint - con sessioni salvate) ----------
 app.post('/chat/new', auth, (req, res) => {
   const id = randomUUID();
   db.prepare('INSERT INTO chat_sessions (id, user_id, title) VALUES (?, ?, ?)')
