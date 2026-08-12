@@ -478,3 +478,17 @@ html.theme-terminal .plan-flag { background: #3ff0a0; color: #071b0f; }
 .stream::-webkit-scrollbar-thumb, .set-body::-webkit-scrollbar-thumb, .u-body::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
 .stream::-webkit-scrollbar-thumb:hover, .set-body::-webkit-scrollbar-thumb:hover, .u-body::-webkit-scrollbar-thumb:hover { background: var(--muted-3); background-clip: padding-box; }
 @media (prefers-reduced-motion: reduce) { .u-bubble, .plan-tile, .theme-card { animation: none; } }
+
+/* ---- lista conversazioni nella sidebar ---- */
+.conv-list { flex: 1; overflow-y: auto; padding: 2px 8px 8px; display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+.conv-empty { font-size: 11.5px; color: var(--muted-3); padding: 8px 10px; line-height: 1.5; }
+.conv-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 7px; cursor: pointer; transition: background .14s; }
+.conv-item:hover { background: var(--active); }
+.conv-item.active { background: var(--active); }
+.conv-item.active .ci-title { color: var(--ink); font-weight: 500; }
+.ci-title { flex: 1; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ci-del { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 5px; font-size: 15px; line-height: 1; color: var(--muted-3); opacity: 0; display: flex; align-items: center; justify-content: center; transition: opacity .14s, background .14s, color .14s; }
+.conv-item:hover .ci-del { opacity: 1; }
+.ci-del:hover { background: var(--line); color: var(--ink); }
+.conv-list::-webkit-scrollbar { width: 8px; }
+.conv-list::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }

@@ -256,6 +256,33 @@ app.post('/chat/new', auth, (req, res) => {
   res.json({ sessionId: id });
 });
 
+// Lista conversazioni dell'utente (piu recenti prima, con anteprima titolo)
+app.get('/chat/sessions', auth, (req, res) => {
+  const rows = db.prepare(`
+    SELECT s.id, s.title, s.created_at,
+      (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.created_at ASC LIMIT 1) AS first_msg,
+      (SELECT MAX(created_at) FROM messages m WHERE m.session_id = s.id) AS last_at,
+      (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS n
+    FROM chat_sessions s
+    WHERE s.user_id = ?
+    ORDER BY COALESCE(last_at, s.created_at) DESC
+  `).all(req.user.id);
+  res.json(rows.map((r) => ({
+    id: r.id,
+    title: (r.first_msg && r.first_msg.slice(0, 60)) || r.title || 'Nuova conversazione',
+    empty: r.n === 0,
+  })));
+});
+
+// Elimina una conversazione (e i suoi messaggi)
+app.delete('/chat/:sessionId', auth, (req, res) => {
+  const session = db.prepare('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?').get(req.params.sessionId, req.user.id);
+  if (!session) return res.sendStatus(404);
+  db.prepare('DELETE FROM messages WHERE session_id = ?').run(req.params.sessionId);
+  db.prepare('DELETE FROM chat_sessions WHERE id = ?').run(req.params.sessionId);
+  res.json({ deleted: true });
+});
+
 app.get('/chat/:sessionId/messages', auth, (req, res) => {
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?')
     .get(req.params.sessionId, req.user.id);

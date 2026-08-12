@@ -394,6 +394,7 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onUpgrade, onDeleteAcc
 function Chat({ token, onLogout }) {
   const [user, setUser] = useState(null);
   const [sessionId, setSessionId] = useState(null);
+  const [sessions, setSessions] = useState([]);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -417,15 +418,58 @@ function Chat({ token, onLogout }) {
 
   useEffect(() => {
     fetch(`${API}/user/profile`, { headers: H }).then((r) => (r.ok ? r.json() : Promise.reject())).then(setUser).catch(onLogout);
-    newChat();
+    initSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
+  const loadSessions = async () => {
+    try {
+      const r = await fetch(`${API}/chat/sessions`, { headers: H });
+      if (!r.ok) return [];
+      const list = await r.json();
+      setSessions(list);
+      return list;
+    } catch { return []; }
+  };
+
+  // All'avvio: apri la conversazione piu recente con messaggi, altrimenti creane una
+  const initSessions = async () => {
+    const list = await loadSessions();
+    const withMsgs = list.find((s) => !s.empty);
+    if (withMsgs) { await openSession(withMsgs.id); }
+    else if (list.length) { setSessionId(list[0].id); setMessages([]); }
+    else { await newChat(); }
+  };
+
+  const openSession = async (id) => {
+    setSessionId(id); setView('chat');
+    try {
+      const r = await fetch(`${API}/chat/${id}/messages`, { headers: H });
+      const msgs = r.ok ? await r.json() : [];
+      setMessages(msgs);
+    } catch { setMessages([]); }
+  };
+
   const newChat = async () => {
+    // riusa una chat vuota gia esistente invece di accumularne tante
+    const empty = sessions.find((s) => s.empty);
+    if (empty) { setSessionId(empty.id); setMessages([]); setView('chat'); return; }
     const res = await fetch(`${API}/chat/new`, { method: 'POST', headers: H, body: JSON.stringify({ title: 'Nuova conversazione' }) });
     const data = await res.json();
     setSessionId(data.sessionId); setMessages([]); setView('chat');
+    loadSessions();
+  };
+
+  const deleteSession = async (id, e) => {
+    e.stopPropagation();
+    if (!window.confirm('Eliminare questa conversazione?')) return;
+    try { await fetch(`${API}/chat/${id}`, { method: 'DELETE', headers: H }); } catch { /* ignore */ }
+    const list = await loadSessions();
+    if (id === sessionId) {
+      const next = list.find((s) => !s.empty) || list[0];
+      if (next) openSession(next.id); else newChat();
+    }
   };
 
   const send = async (preset) => {
@@ -457,6 +501,7 @@ function Chat({ token, onLogout }) {
       }
     } catch { setMessages((m) => { const c = [...m]; c[c.length - 1].content = 'Connessione fallita.'; return c; }); }
     setBusy(false);
+    loadSessions();
   };
 
   const upgrade = async (plan) => {
@@ -505,10 +550,17 @@ function Chat({ token, onLogout }) {
             <button className="new-btn" onClick={newChat}>{I.plus} Nuova conversazione</button>
             <div className="search">{I.search}<span>Cerca</span><span className="kbd">Ctrl K</span></div>
           </div>
-          <div className="side-sec">Linguaggi</div>
-          <div className="langs">
-            <span className="lang">Java</span><span className="lang">Kotlin</span><span className="lang">Python</span>
-            <span className="lang">TypeScript</span><span className="lang">SQL</span><span className="lang dim">+ molti</span>
+          <div className="side-sec">Conversazioni</div>
+          <div className="conv-list">
+            {sessions.filter((s) => !s.empty).length === 0 && (
+              <div className="conv-empty">Nessuna conversazione salvata.</div>
+            )}
+            {sessions.filter((s) => !s.empty).map((s) => (
+              <div key={s.id} className={`conv-item ${s.id === sessionId ? 'active' : ''}`} onClick={() => openSession(s.id)}>
+                <span className="ci-title">{s.title}</span>
+                <button className="ci-del" onClick={(e) => deleteSession(s.id, e)} title="Elimina" aria-label="Elimina">×</button>
+              </div>
+            ))}
           </div>
           <div className="side-foot">
             {user && (<>
