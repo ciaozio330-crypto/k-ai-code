@@ -297,14 +297,24 @@ app.post('/api/chat', auth, async (req, res) => {
       messages: messages,
     });
 
-    const reply = response.content[0]?.type === 'text' ? response.content[0].text : '';
+    let reply = '';
+    if (response.content && response.content.length > 0) {
+      const firstContent = response.content[0];
+      if (firstContent.type === 'text') {
+        reply = firstContent.text;
+      } else {
+        reply = JSON.stringify(firstContent); // fallback: mostra cosa è arrivato
+      }
+    } else {
+      reply = '(nessun contenuto nella risposta)';
+    }
     
     // Incrementa il contatore di richieste
     db.prepare('UPDATE users SET queries_used = queries_used + 1 WHERE id = ?').run(req.user.id);
 
     res.json({ reply, user: { plan: user.plan, queriesUsed: user.queries_used + 1, queriesLimit: user.queries_limit } });
   } catch (err) {
-    console.error('Chat error:', err);
+    console.error('Chat error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
