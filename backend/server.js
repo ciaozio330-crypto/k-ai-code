@@ -30,20 +30,23 @@ app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), (req, re
     const sub = event.data.object;
     const priceId = sub.items?.data?.[0]?.price?.id;
     const planMap = {
+      [process.env.STRIPE_PRICE_STARTER]: 'starter',
       [process.env.STRIPE_PRICE_PRO]: 'pro',
       [process.env.STRIPE_PRICE_ENTERPRISE]: 'enterprise',
-      [process.env.STRIPE_PRICE_TEAM]: 'team',
+      [process.env.STRIPE_PRICE_TEAM_LOW]: 'team_low',
+      [process.env.STRIPE_PRICE_TEAM_MEDIUM]: 'team_medium',
+      [process.env.STRIPE_PRICE_TEAM_MAX]: 'team_max',
     };
     const plan = planMap[priceId] || 'starter';
-    const limits = { free: 10, starter: 60, pro: 300, enterprise: 1200, team: 3000 };
-    db.prepare('UPDATE users SET plan = ?, queries_limit = ?, queries_used = 0 WHERE stripe_customer_id = ?')
-      .run(plan, limits[plan], sub.customer);
+    const now = Date.now();
+    db.prepare('UPDATE users SET plan = ?, tokens_4h_used = 0, window_4h_start = ?, tokens_week_used = 0, week_start = ? WHERE stripe_customer_id = ?')
+      .run(plan, now, now, sub.customer);
   }
 
   if (event.type === 'customer.subscription.deleted') {
     const sub = event.data.object;
-    db.prepare('UPDATE users SET plan = ?, queries_limit = ? WHERE stripe_customer_id = ?')
-      .run('free', 10, sub.customer);
+    db.prepare('UPDATE users SET plan = ? WHERE stripe_customer_id = ?')
+      .run('free', sub.customer);
   }
 
   res.json({ received: true });
@@ -116,6 +119,85 @@ db.exec(`
     expires_at INTEGER NOT NULL
   );
 `);
+
+// ---------- Sistema a TOKEN con finestre (4h + settimanale) ----------
+const WINDOW_4H = 4 * 60 * 60 * 1000;
+const WINDOW_WEEK = 7 * 24 * 60 * 60 * 1000;
+
+// cap4h: token per finestra di 4 ore (si resetta ogni 4h)
+// week: tetto settimanale (solo free & starter), null = nessun tetto settimanale
+const PLAN_LIMITS = {
+  free:        { cap4h: 15000,   week: 50000 },
+  starter:     { cap4h: 40000,   week: 200000 },
+  pro:         { cap4h: 120000,  week: null },
+  enterprise:  { cap4h: 280000,  week: null },
+  team_low:    { cap4h: 420000,  week: null },
+  team_medium: { cap4h: 600000,  week: null },
+  team_max:    { cap4h: 850000,  week: null },
+};
+function planCfg(plan) { return PLAN_LIMITS[plan] || PLAN_LIMITS.free; }
+
+// migrazione: aggiunge le colonne token se mancano
+function ensureColumn(table, col, def) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.find((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+}
+ensureColumn('users', 'tokens_4h_used', 'INTEGER DEFAULT 0');
+ensureColumn('users', 'window_4h_start', 'INTEGER DEFAULT 0');
+ensureColumn('users', 'tokens_week_used', 'INTEGER DEFAULT 0');
+ensureColumn('users', 'week_start', 'INTEGER DEFAULT 0');
+
+// resetta le finestre scadute e restituisce i contatori aggiornati
+function refreshWindows(user) {
+  const now = Date.now();
+  let w4 = user.window_4h_start || 0;
+  let t4 = user.tokens_4h_used || 0;
+  let wk = user.week_start || 0;
+  let tw = user.tokens_week_used || 0;
+  let changed = false;
+  if (now - w4 >= WINDOW_4H) { w4 = now; t4 = 0; changed = true; }
+  if (now - wk >= WINDOW_WEEK) { wk = now; tw = 0; changed = true; }
+  if (changed) {
+    db.prepare('UPDATE users SET window_4h_start=?, tokens_4h_used=?, week_start=?, tokens_week_used=? WHERE id=?')
+      .run(w4, t4, wk, tw, user.id);
+  }
+  return { w4, t4, wk, tw };
+}
+
+// stato di utilizzo normalizzato per il client
+function usageFor(user) {
+  const w = refreshWindows(user);
+  const cfg = planCfg(user.plan);
+  return {
+    plan: user.plan,
+    day: { used: w.t4, cap: cfg.cap4h, resetAt: w.w4 + WINDOW_4H },
+    week: cfg.week != null ? { used: w.tw, cap: cfg.week, resetAt: w.wk + WINDOW_WEEK } : null,
+  };
+}
+
+// verifica se l'utente può fare una richiesta
+function checkQuota(user) {
+  const u = usageFor(user);
+  if (u.day.used >= u.day.cap) return { ok: false, kind: 'day', resetAt: u.day.resetAt };
+  if (u.week && u.week.used >= u.week.cap) return { ok: false, kind: 'week', resetAt: u.week.resetAt };
+  return { ok: true };
+}
+
+function quotaMsg(q) {
+  if (q.kind === 'week') return 'Hai esaurito i token settimanali del tuo piano. Passa a un piano superiore o attendi il reset settimanale.';
+  return 'Hai esaurito i token della finestra di 4 ore. Attendi il reset o passa a un piano superiore.';
+}
+
+// accredita i token consumati (4h sempre, settimanale solo se il piano ha il tetto)
+function addTokens(userId, plan, n) {
+  const cfg = planCfg(plan);
+  const amount = Math.max(0, Math.round(n || 0));
+  if (cfg.week != null) {
+    db.prepare('UPDATE users SET tokens_4h_used = tokens_4h_used + ?, tokens_week_used = tokens_week_used + ? WHERE id=?').run(amount, amount, userId);
+  } else {
+    db.prepare('UPDATE users SET tokens_4h_used = tokens_4h_used + ? WHERE id=?').run(amount, userId);
+  }
+}
 
 // ---------- Email (Resend) ----------
 function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
@@ -257,24 +339,21 @@ app.post('/auth/login/verify', (req, res) => {
 
 // ---------- User ----------
 app.get('/user/profile', auth, (req, res) => {
-  const user = db.prepare('SELECT id, email, plan, queries_used, queries_limit FROM users WHERE id = ?')
-    .get(req.user.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.sendStatus(404);
-  res.json(user);
+  res.json({ id: user.id, email: user.email, plan: user.plan, usage: usageFor(user) });
 });
 
 // Alias per CLI: restituisce i dati dell'utente autenticato
 app.get('/api/me', auth, (req, res) => {
-  const user = db.prepare('SELECT id, email, plan, queries_used, queries_limit FROM users WHERE id = ?')
-    .get(req.user.id);
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.sendStatus(404);
   res.json({
     id: user.id,
     email: user.email,
     username: user.email.split('@')[0],
     plan: user.plan,
-    queriesUsed: user.queries_used,
-    queriesLimit: user.queries_limit,
+    usage: usageFor(user),
   });
 });
 
@@ -287,8 +366,9 @@ app.post('/api/chat', auth, async (req, res) => {
   }
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-  if (user.queries_used >= user.queries_limit) {
-    return res.status(402).json({ error: 'Limite di richieste raggiunto. Fai upgrade del piano.' });
+  const q = checkQuota(user);
+  if (!q.ok) {
+    return res.status(402).json({ error: quotaMsg(q), kind: q.kind, resetAt: q.resetAt });
   }
 
   try {
@@ -312,11 +392,13 @@ app.post('/api/chat', auth, async (req, res) => {
     } else {
       reply = '(nessun contenuto nella risposta)';
     }
-    
-    // Incrementa il contatore di richieste
-    db.prepare('UPDATE users SET queries_used = queries_used + 1 WHERE id = ?').run(req.user.id);
 
-    res.json({ reply, user: { plan: user.plan, queriesUsed: user.queries_used + 1, queriesLimit: user.queries_limit } });
+    // Accredita i token realmente consumati
+    const usedTok = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+    addTokens(req.user.id, user.plan, usedTok);
+    const fresh = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+
+    res.json({ reply, usage: usageFor(fresh) });
   } catch (err) {
     console.error('Chat error:', err.message);
     res.status(500).json({ error: err.message });
@@ -374,8 +456,9 @@ app.post('/chat/message', auth, async (req, res) => {
   if (!sessionId || (!message && images.length === 0)) return res.status(400).json({ error: 'sessionId and message required' });
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-  if (user.queries_used >= user.queries_limit) {
-    return res.status(429).json({ error: 'Limite di richieste raggiunto. Fai upgrade del piano.' });
+  const q = checkQuota(user);
+  if (!q.ok) {
+    return res.status(429).json({ error: quotaMsg(q), kind: q.kind, resetAt: q.resetAt });
   }
   const session = db.prepare('SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?')
     .get(sessionId, req.user.id);
@@ -423,13 +506,17 @@ app.post('/chat/message', auth, async (req, res) => {
       res.write(`data: ${JSON.stringify({ type: 'text', content: delta })}\n\n`);
     });
 
-    await stream.finalMessage();
+    const finalMsg = await stream.finalMessage();
 
     db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?, ?, ?, ?)')
       .run(randomUUID(), sessionId, 'assistant', full);
-    db.prepare('UPDATE users SET queries_used = queries_used + 1 WHERE id = ?').run(req.user.id);
 
-    res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+    // Accredita i token realmente consumati (input + output)
+    const usedTok = (finalMsg?.usage?.input_tokens || 0) + (finalMsg?.usage?.output_tokens || 0);
+    addTokens(req.user.id, user.plan, usedTok);
+    const fresh = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+
+    res.write(`data: ${JSON.stringify({ type: 'done', usage: usageFor(fresh) })}\n\n`);
     res.end();
   } catch (err) {
     console.error('Chat error:', err);
@@ -446,7 +533,9 @@ app.post('/billing/create-checkout', auth, async (req, res) => {
     starter: process.env.STRIPE_PRICE_STARTER,
     pro: process.env.STRIPE_PRICE_PRO,
     enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
-    team: process.env.STRIPE_PRICE_TEAM,
+    team_low: process.env.STRIPE_PRICE_TEAM_LOW,
+    team_medium: process.env.STRIPE_PRICE_TEAM_MEDIUM,
+    team_max: process.env.STRIPE_PRICE_TEAM_MAX,
   };
   if (!priceMap[plan]) return res.status(400).json({ error: 'Invalid plan' });
 
@@ -490,7 +579,9 @@ app.post('/billing/create-checkout', auth, async (req, res) => {
     starter: process.env.STRIPE_PRICE_STARTER,
     pro: process.env.STRIPE_PRICE_PRO,
     enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
-    team: process.env.STRIPE_PRICE_TEAM,
+    team_low: process.env.STRIPE_PRICE_TEAM_LOW,
+    team_medium: process.env.STRIPE_PRICE_TEAM_MEDIUM,
+    team_max: process.env.STRIPE_PRICE_TEAM_MAX,
   };
   if (!priceMap[plan]) return res.status(400).json({ error: 'Invalid plan' });
 

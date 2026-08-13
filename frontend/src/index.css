@@ -714,3 +714,50 @@ html.theme-terminal .welcome .k { -webkit-text-fill-color: #3ff0a0; }
   .tb-feats { grid-template-columns: 1fr; }
   .u-images img { max-width: 130px; max-height: 130px; }
 }
+
+
+/* ============================================================
+   TOKEN USAGE BARS + TEAM GRID (v2)
+   ============================================================ */
+
+/* barre di utilizzo a token */
+.tok-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.tok-card { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow-sm); }
+.tok-card.ghost { justify-content: center; gap: 8px; background: var(--surface-2); }
+.tok-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.tok-label { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.tok-reset { font-size: 11.5px; color: var(--text-4); font-variant-numeric: tabular-nums; }
+.tok-nums { display: flex; align-items: baseline; gap: 8px; }
+.tok-used { font-size: 34px; font-weight: 700; letter-spacing: -0.03em; color: var(--text); line-height: 1; }
+.tok-cap { font-size: 13px; color: var(--text-3); }
+.tok-bar { height: 8px; background: var(--surface-3); border-radius: 99px; overflow: hidden; }
+.tok-bar > div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-bright)); border-radius: 99px; transition: width .5s var(--ease-out); }
+.tok-bar.warn > div { background: linear-gradient(90deg, var(--amber), #f59e0b); }
+.tok-sub { font-size: 11.5px; color: var(--text-4); }
+.tok-nofree { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-3); }
+
+.usage-reset { font-size: 10.5px; color: var(--text-4); font-variant-numeric: tabular-nums; }
+
+/* ---- SEZIONE PIANI TEAM (3 tile) ---- */
+.team-sec { margin-top: 6px; display: flex; flex-direction: column; gap: 16px; }
+.team-head { display: flex; }
+.team-head .tb-flag { display: inline-block; margin-bottom: 10px; }
+.team-title { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
+.team-sub { font-size: 13px; color: var(--text-3); margin: 6px 0 0; max-width: 560px; line-height: 1.55; }
+.tb-flag { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; color: var(--accent); background: var(--accent-tint); border-radius: 99px; padding: 4px 11px; }
+
+.team-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.team-tile {
+  position: relative; display: flex; flex-direction: column; gap: 11px; padding: 24px 22px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: radial-gradient(420px 220px at 100% 0%, var(--accent-tint), transparent 62%), var(--surface);
+  box-shadow: var(--shadow-sm); transition: border-color .18s, transform .16s var(--ease); will-change: transform;
+}
+.team-tile:hover { transform: translateY(-4px); border-color: var(--border-strong); }
+.team-tile.featured { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-tint), var(--shadow-md); }
+.team-tile.cur { background: var(--surface-2); }
+
+@media (max-width: 900px) {
+  .tok-grid { grid-template-columns: 1fr; }
+  .team-grid { grid-template-columns: 1fr; }
+}

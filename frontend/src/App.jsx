@@ -69,23 +69,38 @@ const EXAMPLES = [
 ];
 
 const PLANS = [
-  { id: 'free', name: 'Free', price: '0 EUR', limit: 10, desc: '10 richieste al mese. Per provare.' },
-  { id: 'starter', name: 'Starter', price: '15 EUR', limit: 60, desc: '60 richieste al mese. Per iniziare.' },
-  { id: 'pro', name: 'Pro', price: '60 EUR', limit: 300, desc: '300 richieste al mese. Per team piccoli.' },
-  { id: 'enterprise', name: 'Enterprise', price: '140 EUR', limit: 1200, desc: '1.200 richieste/mese (fair use). Per network.' },
+  { id: 'free', name: 'Free', price: '0', cap4h: 15000, week: 50000, desc: 'Per provare. Cap basso con tetto settimanale.' },
+  { id: 'starter', name: 'Starter', price: '15', cap4h: 40000, week: 200000, desc: 'Per iniziare. Qualche reset durante la giornata.' },
+  { id: 'pro', name: 'Pro', price: '60', cap4h: 120000, week: null, desc: 'Molti token. Lavori quotidiani senza pensieri.' },
+  { id: 'enterprise', name: 'Enterprise', price: '140', cap4h: 280000, week: null, desc: 'Lavori complessi senza cap, salvo raffiche intense.' },
 ];
 
-const TEAM = {
-  id: 'team', name: 'Team', price: '400 EUR', limit: 3000,
-  desc: 'Un pool condiviso di richieste per tutta la tua crew, con fatturazione unica.',
-  feats: [
-    'Pool condiviso di 3.000 richieste / mese',
-    'Fino a 10 postazioni per il tuo team',
-    'Fatturazione unica e centralizzata',
-    'Supporto prioritario dedicato',
-    'Modello Fable 5 + upload immagini + export ZIP',
-  ],
+const TEAMS = [
+  { id: 'team_low', name: 'Team Low', price: '200', cap4h: 420000, desc: 'Più potenza dell\'Enterprise, per team piccoli.' },
+  { id: 'team_medium', name: 'Team Medium', price: '300', cap4h: 600000, desc: 'Più token del Low, per team in crescita.' },
+  { id: 'team_max', name: 'Team Max', price: '400', cap4h: 850000, desc: 'Massima potenza condivisa per tutto il network.' },
+];
+
+const PLAN_NAMES = {
+  free: 'Free', starter: 'Starter', pro: 'Pro', enterprise: 'Enterprise',
+  team_low: 'Team Low', team_medium: 'Team Medium', team_max: 'Team Max',
 };
+
+function fmtTokens(n) {
+  if (n == null) return '—';
+  if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 ? 1 : 0) + 'M';
+  if (n >= 1000) return Math.round(n / 1000) + 'k';
+  return String(n);
+}
+function fmtReset(resetAt) {
+  const ms = Math.max(0, (resetAt || 0) - Date.now());
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  if (h >= 24) { const d = Math.floor(h / 24); return `${d}g ${h % 24}h`; }
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return 'a breve';
+}
 
 const I = {
   chat: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
@@ -269,61 +284,69 @@ function Auth({ onAuth }) {
   );
 }
 
+function UsageBar({ label, used, cap, resetAt, sub }) {
+  const pct = cap ? Math.min((used / cap) * 100, 100) : 0;
+  const warn = pct > 80;
+  return (
+    <div className="tok-card">
+      <div className="tok-top">
+        <span className="tok-label">{label}</span>
+        <span className="tok-reset">reset tra {fmtReset(resetAt)}</span>
+      </div>
+      <div className="tok-nums">
+        <span className="tok-used">{fmtTokens(used)}</span>
+        <span className="tok-cap">/ {fmtTokens(cap)} token</span>
+      </div>
+      <div className={`tok-bar ${warn ? 'warn' : ''}`}><div style={{ width: `${pct}%` }} /></div>
+      {sub && <span className="tok-sub">{sub}</span>}
+    </div>
+  );
+}
+
 function UsageView({ user, onUpgrade }) {
-  if (!user) return <div className="usage-view" />;
-  const pct = Math.min((user.queries_used / user.queries_limit) * 100, 100);
-  const left = Math.max(user.queries_limit - user.queries_used, 0);
-  const cur = PLANS.find((p) => p.id === user.plan) || PLANS[0];
+  if (!user || !user.usage) return <div className="usage-view" />;
+  const { day, week } = user.usage;
+  const planId = user.usage.plan || user.plan;
+  const cur = PLANS.find((p) => p.id === planId) || TEAMS.find((t) => t.id === planId);
+  const isTeam = String(planId).startsWith('team');
+
   return (
     <div className="usage-view">
       <div className="u-top">
         <span className="t">Uso</span>
-        <span className="sub">Piano {user.plan}</span>
-        <span className="right"><span className="pill">Questo mese</span></span>
+        <span className="sub">Piano {PLAN_NAMES[planId] || planId}</span>
+        <span className="right"><span className="pill">Token · Fable 5</span></span>
       </div>
       <div className="u-body">
-        <div className="stat-grid">
-          <div className="stat">
-            <span className="lbl">Richieste usate</span>
-            <span className="num">{user.queries_used}</span>
-            <span className="cap">di {user.queries_limit}</span>
-            <div className={`mini ${pct > 80 ? 'warn' : ''}`}><div style={{ width: `${pct}%` }} /></div>
-          </div>
-          <div className="stat">
-            <span className="lbl">Rimaste</span>
-            <span className="num">{left}</span>
-            <span className="cap">nel ciclo corrente</span>
-          </div>
-          <div className="stat">
-            <span className="lbl">Limite piano</span>
-            <span className="num">{user.queries_limit}</span>
-            <span className="cap">richieste / mese</span>
-          </div>
-          <div className="stat">
-            <span className="lbl">Piano</span>
-            <span className="num" style={{ fontSize: 26 }}>{cur.name}</span>
-            <span className="cap">{cur.id === 'free' ? 'Gratis' : cur.price + ' / mese'}</span>
-          </div>
+        <div className="tok-grid">
+          <UsageBar label="Finestra corrente (4h)" used={day.used} cap={day.cap} resetAt={day.resetAt}
+            sub="Si resetta ogni 4 ore" />
+          {week
+            ? <UsageBar label="Tetto settimanale" used={week.used} cap={week.cap} resetAt={week.resetAt}
+                sub="Solo Free e Starter" />
+            : <div className="tok-card ghost">
+                <div className="tok-top"><span className="tok-label">Tetto settimanale</span></div>
+                <div className="tok-nofree">Nessun tetto settimanale</div>
+                <span className="tok-sub">Il tuo piano è limitato solo dalla finestra di 4 ore</span>
+              </div>}
         </div>
 
         <div className="plans-h">Scegli il tuo piano</div>
         <div className="plan-grid">
           {PLANS.map((p) => {
-            const isCur = p.id === user.plan;
-            const feat = p.id === 'free'
-              ? ['10 richieste / mese', 'Modello Fable 5', 'Per provare il servizio']
-              : p.id === 'starter'
-              ? ['60 richieste / mese', 'Modello Fable 5', 'Cronologia chat']
-              : p.id === 'pro'
-              ? ['300 richieste / mese', 'Modello Fable 5', 'Supporto prioritario']
-              : ['1.200 richieste / mese', 'Modello Fable 5', 'Fair use per network'];
+            const isCur = p.id === planId;
+            const feat = [
+              `${fmtTokens(p.cap4h)} token ogni 4h`,
+              p.week ? `Tetto settimanale ${fmtTokens(p.week)}` : 'Nessun tetto settimanale',
+              'Modello Fable 5 · immagini · ZIP',
+            ];
             return (
               <div className={`plan-tile ${isCur ? 'cur' : ''} ${p.id === 'pro' ? 'featured' : ''}`} key={p.id}>
                 {p.id === 'pro' && <span className="plan-flag">Consigliato</span>}
                 <div className="pt-name">{p.name}</div>
                 {p.id === 'free'
                   ? <div className="pt-price"><b>Gratis</b></div>
-                  : <div className="pt-price"><b>{p.price.replace(' EUR', '')}</b><span>€ / mese</span></div>}
+                  : <div className="pt-price"><b>{p.price}</b><span>€ / mese</span></div>}
                 <div className="pt-desc">{p.desc}</div>
                 <ul className="pt-feats">
                   {feat.map((f) => <li key={f}>{f}</li>)}
@@ -339,22 +362,34 @@ function UsageView({ user, onUpgrade }) {
         </div>
 
         <div className="team-sec">
-          <div className="team-band">
-            <div className="tb-left">
+          <div className="team-head">
+            <div>
               <span className="tb-flag">Per team & network</span>
-              <div className="tb-name">{TEAM.name}</div>
-              <p className="tb-desc">{TEAM.desc}</p>
-              <ul className="tb-feats">
-                {TEAM.feats.map((f) => <li key={f}>{f}</li>)}
-              </ul>
+              <div className="team-title">Piani Team</div>
+              <p className="team-sub">Molti più token dell'Enterprise, condivisi tra il team. Fatturazione unica, fino a 10 postazioni.</p>
             </div>
-            <div className="tb-right">
-              <div className="tb-price"><b>400</b><span>€ / mese</span></div>
-              {user.plan === 'team'
-                ? <button className="tb-btn cur" disabled>Piano attuale</button>
-                : <button className="tb-btn" onClick={() => onUpgrade('team')}>Passa a Team</button>}
-              <span className="tb-note">Fatturazione unica · fino a 10 postazioni</span>
-            </div>
+          </div>
+          <div className="team-grid">
+            {TEAMS.map((t) => {
+              const isCur = t.id === planId;
+              return (
+                <div className={`team-tile ${isCur ? 'cur' : ''} ${t.id === 'team_medium' ? 'featured' : ''}`} key={t.id}>
+                  {t.id === 'team_medium' && <span className="plan-flag">Più scelto</span>}
+                  <div className="pt-name">{t.name}</div>
+                  <div className="pt-price"><b>{t.price}</b><span>€ / mese</span></div>
+                  <div className="pt-desc">{t.desc}</div>
+                  <ul className="pt-feats">
+                    <li>{fmtTokens(t.cap4h)} token ogni 4h</li>
+                    <li>Nessun tetto settimanale</li>
+                    <li>Fino a 10 postazioni</li>
+                    <li>Fatturazione unica · supporto dedicato</li>
+                  </ul>
+                  {isCur
+                    ? <button className="pt-btn cur" disabled>Piano attuale</button>
+                    : <button className="pt-btn" onClick={() => onUpgrade(t.id)}>Passa a {t.name}</button>}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -368,8 +403,9 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onUpgrade, onDeleteAcc
   const set = (patch) => onChange({ ...prefs, ...patch });
   const SECTIONS = [['generale', 'Generale'], ['account', 'Account'], ['fatturazione', 'Fatturazione'], ['utilizzo', 'Utilizzo'], ['privacy', 'Privacy'], ['funzionalita', 'Funzionalita']];
   const title = (SECTIONS.find((s) => s[0] === section) || SECTIONS[0])[1];
-  const pct = Math.min((user.queries_used / user.queries_limit) * 100, 100);
-  const left = Math.max(user.queries_limit - user.queries_used, 0);
+  const day = user.usage?.day;
+  const week = user.usage?.week;
+  const dayPct = day ? Math.min((day.used / day.cap) * 100, 100) : 0;
   const av = (prefs.callme || prefs.name || user.email).slice(0, 2).toUpperCase();
   return (
     <div className="settings-view">
@@ -428,7 +464,7 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onUpgrade, onDeleteAcc
               <div className="set-block">
                 <div className="lead"><span className="lt">Account</span><span className="ld">Il tuo profilo K AI Code.</span></div>
                 <div className="kv"><span className="k2">Email</span><span className="v2">{user.email}</span></div>
-                <div className="kv"><span className="k2">Piano</span><span className="v2">{user.plan}</span></div>
+                <div className="kv"><span className="k2">Piano</span><span className="v2">{PLAN_NAMES[user.plan] || user.plan}</span></div>
                 <div style={{ display: 'flex', gap: 8 }}><button className="btn-line" onClick={onLogout}>Esci</button></div>
               </div>
             )}
@@ -436,7 +472,7 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onUpgrade, onDeleteAcc
             {section === 'fatturazione' && (
               <div className="set-block">
                 <div className="lead"><span className="lt">Fatturazione</span><span className="ld">Piano e pagamento.</span></div>
-                <div className="kv"><span className="k2">Piano</span><span className="v2">{user.plan}</span></div>
+                <div className="kv"><span className="k2">Piano</span><span className="v2">{PLAN_NAMES[user.plan] || user.plan}</span></div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="btn-ink" onClick={onGoUsage}>Scegli / cambia piano</button>
                   <button className="btn-line" onClick={onGoUsage}>Vedi uso</button>
@@ -446,10 +482,15 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onUpgrade, onDeleteAcc
 
             {section === 'utilizzo' && (
               <div className="set-block">
-                <div className="lead"><span className="lt">Utilizzo</span><span className="ld">Consumo del ciclo corrente.</span></div>
-                <div className="kv"><span className="k2">Usate</span><span className="v2">{user.queries_used} / {user.queries_limit}</span></div>
-                <div className="kv"><span className="k2">Rimaste</span><span className="v2">{left}</span></div>
-                <div className={`usage-bar ${pct > 80 ? 'warn' : ''}`} style={{ maxWidth: 360 }}><div style={{ width: `${pct}%` }} /></div>
+                <div className="lead"><span className="lt">Utilizzo</span><span className="ld">Consumo a token del tuo piano.</span></div>
+                {day && (<>
+                  <div className="kv"><span className="k2">Finestra 4h</span><span className="v2">{fmtTokens(day.used)} / {fmtTokens(day.cap)} token</span></div>
+                  <div className={`usage-bar ${dayPct > 80 ? 'warn' : ''}`} style={{ maxWidth: 360 }}><div style={{ width: `${dayPct}%` }} /></div>
+                  <div className="kv"><span className="k2">Reset 4h</span><span className="v2">tra {fmtReset(day.resetAt)}</span></div>
+                </>)}
+                {week && (
+                  <div className="kv"><span className="k2">Settimanale</span><span className="v2">{fmtTokens(week.used)} / {fmtTokens(week.cap)} · reset tra {fmtReset(week.resetAt)}</span></div>
+                )}
                 <div><button className="btn-line" onClick={onGoUsage}>Apri pagina Uso</button></div>
               </div>
             )}
@@ -524,6 +565,8 @@ function Chat({ token, onLogout }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+  const [, setTick] = useState(0);
+  useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 60000); return () => clearInterval(t); }, []);
 
   const loadSessions = async () => {
     try {
@@ -610,7 +653,7 @@ function Chat({ token, onLogout }) {
             const evt = JSON.parse(line);
             if (evt.type === 'text') setMessages((m) => { const c = [...m]; c[c.length - 1].content += evt.content; return [...c]; });
             else if (evt.type === 'error') setMessages((m) => { const c = [...m]; c[c.length - 1].content += '\n\n' + evt.error; return [...c]; });
-            else if (evt.type === 'done') setUser((u) => (u ? { ...u, queries_used: u.queries_used + 1 } : u));
+            else if (evt.type === 'done') { if (evt.usage) setUser((u) => (u ? { ...u, usage: evt.usage } : u)); }
           } catch { /* partial */ }
         }
       }
@@ -636,9 +679,12 @@ function Chat({ token, onLogout }) {
     onLogout();
   };
 
-  const pct = user ? Math.min((user.queries_used / user.queries_limit) * 100, 100) : 0;
-  const left = user ? Math.max(user.queries_limit - user.queries_used, 0) : 0;
+  const day = user?.usage?.day;
+  const dayPct = day ? Math.min((day.used / day.cap) * 100, 100) : 0;
+  const dayLeft = day ? Math.max(day.cap - day.used, 0) : 0;
+  const atCap = day ? day.used >= day.cap : false;
   const initials = user ? user.email.slice(0, 2).toUpperCase() : 'K';
+  const planLabel = user ? (PLAN_NAMES[user.plan] || user.plan) : '';
   const convTitle = messages.find((m) => m.role === 'user')?.content?.slice(0, 46) || 'Nuova conversazione';
 
   return (
@@ -659,7 +705,7 @@ function Chat({ token, onLogout }) {
         <div className="side">
           <div className="side-head">
             <span className="wordmark">K AI</span>
-            <span className="tag">{user ? user.plan : ''}</span>
+            <span className="tag">{planLabel}</span>
           </div>
           <div className="side-actions">
             <button className="new-btn" onClick={newChat}>{I.plus} Nuova conversazione</button>
@@ -678,11 +724,11 @@ function Chat({ token, onLogout }) {
             ))}
           </div>
           <div className="side-foot">
-            {user && (<>
-              <div className="usage-row"><span>Uso ({user.plan})</span><b>{user.queries_used}/{user.queries_limit}</b></div>
-              <div className={`usage-bar ${pct > 80 ? 'warn' : ''}`}><div style={{ width: `${pct}%` }} /></div>
-              {user.queries_used >= user.queries_limit &&
-                <button className="upg" onClick={() => setView('usage')}>Fai upgrade</button>}
+            {user && day && (<>
+              <div className="usage-row"><span>Token · finestra 4h</span><b>{fmtTokens(day.used)}/{fmtTokens(day.cap)}</b></div>
+              <div className={`usage-bar ${dayPct > 80 ? 'warn' : ''}`}><div style={{ width: `${dayPct}%` }} /></div>
+              <div className="usage-reset">reset tra {fmtReset(day.resetAt)}</div>
+              {atCap && <button className="upg" onClick={() => setView('usage')}>Fai upgrade</button>}
             </>)}
             <button className="logout" onClick={onLogout}>Esci</button>
           </div>
@@ -763,7 +809,7 @@ function Chat({ token, onLogout }) {
               </div>
               <div className="composer-meta">
                 <span>Invio per inviare - Shift+Invio a capo</span>
-                <span>Fable 5 - {left} richieste rimaste</span>
+                <span>Fable 5 · {fmtTokens(dayLeft)} token nella finestra</span>
               </div>
             </div>
           </div>
