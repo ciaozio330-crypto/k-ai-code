@@ -1,6 +1,65 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
+import JSZip from 'jszip';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+const LANG_EXT = {
+  javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts', jsx: 'jsx', tsx: 'tsx',
+  python: 'py', py: 'py', java: 'java', kotlin: 'kt', kt: 'kt', json: 'json',
+  yaml: 'yml', yml: 'yml', xml: 'xml', html: 'html', css: 'css', scss: 'scss',
+  rust: 'rs', go: 'go', csharp: 'cs', cs: 'cs', c: 'c', cpp: 'cpp', 'c++': 'cpp',
+  sh: 'sh', bash: 'sh', shell: 'sh', sql: 'sql', toml: 'toml', properties: 'properties',
+  gradle: 'gradle', groovy: 'groovy', md: 'md', markdown: 'md', php: 'php', ruby: 'rb', rb: 'rb',
+  swift: 'swift', dockerfile: 'Dockerfile', dart: 'dart',
+};
+
+// Estrae i blocchi di codice da una risposta e ne ricava nomi file plausibili
+function extractCodeFiles(text) {
+  const files = [];
+  const parts = String(text).split('```');
+  let idx = 0;
+  for (let i = 1; i < parts.length; i += 2) {
+    const block = parts[i];
+    const nl = block.indexOf('\n');
+    const info = (nl > -1 ? block.slice(0, nl) : '').trim();
+    const body = (nl > -1 ? block.slice(nl + 1) : block).replace(/\n$/, '');
+    if (!body.trim()) continue;
+    let lang = info, name = '';
+    const sep = info.match(/^(\S+)[:\s]+(.+)$/);
+    if (sep) { lang = sep[1]; name = sep[2].trim(); }
+    if (!name) {
+      const fm = body.match(/^\s*(?:\/\/|#|<!--|--|\/\*)\s*(?:file|filename)\s*[:=]\s*(.+?)\s*(?:\*\/|-->)?\s*$/im);
+      if (fm) name = fm[1].trim();
+    }
+    if (!name) {
+      idx++;
+      const ext = LANG_EXT[(lang || '').toLowerCase()] || 'txt';
+      name = ext === 'Dockerfile' ? 'Dockerfile' : `file-${idx}.${ext}`;
+    }
+    files.push({ name: name.replace(/^[\\/]+/, ''), content: body });
+  }
+  return files;
+}
+
+async function downloadZip(files, baseName = 'k-ai-code') {
+  const zip = new JSZip();
+  const used = {};
+  for (const f of files) {
+    let n = f.name;
+    if (used[n]) {
+      const d = n.lastIndexOf('.');
+      n = d > 0 ? `${n.slice(0, d)}-${used[f.name]}${n.slice(d)}` : `${n}-${used[f.name]}`;
+    }
+    used[f.name] = (used[f.name] || 0) + 1;
+    zip.file(n, f.content);
+  }
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${baseName}.zip`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
 
 const EXAMPLES = [
   'Porta questo plugin da Spigot a Paper 1.21',
@@ -16,6 +75,18 @@ const PLANS = [
   { id: 'enterprise', name: 'Enterprise', price: '140 EUR', limit: 1200, desc: '1.200 richieste/mese (fair use). Per network.' },
 ];
 
+const TEAM = {
+  id: 'team', name: 'Team', price: '400 EUR', limit: 3000,
+  desc: 'Un pool condiviso di richieste per tutta la tua crew, con fatturazione unica.',
+  feats: [
+    'Pool condiviso di 3.000 richieste / mese',
+    'Fino a 10 postazioni per il tuo team',
+    'Fatturazione unica e centralizzata',
+    'Supporto prioritario dedicato',
+    'Modello Fable 5 + upload immagini + export ZIP',
+  ],
+};
+
 const I = {
   chat: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
   code: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg>,
@@ -23,6 +94,8 @@ const I = {
   chart: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>,
   gear: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>,
   plus: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 5v14M5 12h14"/></svg>,
+  image: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg>,
+  zip: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>,
   search: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9a9ea6" strokeWidth="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg>,
   send: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4"><path d="M5 12h13M12 5l7 7-7 7"/></svg>,
   chevron: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8f939a" strokeWidth="3"><path d="M6 9l6 6 6-6"/></svg>,
@@ -264,6 +337,26 @@ function UsageView({ user, onUpgrade }) {
             );
           })}
         </div>
+
+        <div className="team-sec">
+          <div className="team-band">
+            <div className="tb-left">
+              <span className="tb-flag">Per team & network</span>
+              <div className="tb-name">{TEAM.name}</div>
+              <p className="tb-desc">{TEAM.desc}</p>
+              <ul className="tb-feats">
+                {TEAM.feats.map((f) => <li key={f}>{f}</li>)}
+              </ul>
+            </div>
+            <div className="tb-right">
+              <div className="tb-price"><b>400</b><span>€ / mese</span></div>
+              {user.plan === 'team'
+                ? <button className="tb-btn cur" disabled>Piano attuale</button>
+                : <button className="tb-btn" onClick={() => onUpgrade('team')}>Passa a Team</button>}
+              <span className="tb-note">Fatturazione unica · fino a 10 postazioni</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -404,6 +497,8 @@ function Chat({ token, onLogout }) {
   const [sessions, setSessions] = useState([]);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [images, setImages] = useState([]);
+  const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState('chat');
   const [prefs, setPrefsState] = useState(() => {
@@ -479,13 +574,26 @@ function Chat({ token, onLogout }) {
     }
   };
 
+  const onFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach((file) => {
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = () => setImages((prev) => [...prev, { name: file.name, dataUrl: reader.result }].slice(0, 6));
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
   const send = async (preset) => {
     const text = (preset ?? input).trim();
-    if (!text || !sessionId || busy) return;
-    setInput(''); setBusy(true);
-    setMessages((m) => [...m, { role: 'user', content: text }, { role: 'assistant', content: '' }]);
+    const imgs = preset ? [] : images;
+    if ((!text && imgs.length === 0) || !sessionId || busy) return;
+    const imgUrls = imgs.map((i) => i.dataUrl);
+    setInput(''); setImages([]); setBusy(true);
+    setMessages((m) => [...m, { role: 'user', content: text, images: imgUrls }, { role: 'assistant', content: '' }]);
     try {
-      const res = await fetch(`${API}/chat/message`, { method: 'POST', headers: H, body: JSON.stringify({ sessionId, message: text, prefs }) });
+      const res = await fetch(`${API}/chat/message`, { method: 'POST', headers: H, body: JSON.stringify({ sessionId, message: text, prefs, images: imgUrls }) });
       if (res.status === 429) {
         const d = await res.json();
         setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: 'assistant', content: d.error }; return c; });
@@ -599,7 +707,14 @@ function Chat({ token, onLogout }) {
                 </div>
               ) : messages.map((m, i) => (
                 m.role === 'user' ? (
-                  <div className="turn-user" key={i}><div className="u-bubble">{m.content}</div></div>
+                  <div className="turn-user" key={i}>
+                    {m.images && m.images.length > 0 && (
+                      <div className="u-images">
+                        {m.images.map((src, j) => <img key={j} src={src} alt="allegato" />)}
+                      </div>
+                    )}
+                    {m.content && <div className="u-bubble">{m.content}</div>}
+                  </div>
                 ) : (
                   <div className="turn-ai" key={i}>
                     <div className="ai-head"><span className="k">K</span><span className="meta">Fable 5</span></div>
@@ -607,6 +722,12 @@ function Chat({ token, onLogout }) {
                     {m.content && (
                       <div className="ai-actions">
                         <button className="act-chip" onClick={() => navigator.clipboard?.writeText(m.content)}>Copia</button>
+                        {(() => {
+                          const files = extractCodeFiles(m.content);
+                          return files.length > 0 ? (
+                            <button className="act-chip zip" onClick={() => downloadZip(files)}>{I.zip} Scarica ZIP · {files.length} file</button>
+                          ) : null;
+                        })()}
                       </div>
                     )}
                   </div>
@@ -619,14 +740,25 @@ function Chat({ token, onLogout }) {
           <div className="composer">
             <div className="composer-inner">
               <div className="box">
+                {images.length > 0 && (
+                  <div className="composer-thumbs">
+                    {images.map((im, idx) => (
+                      <div className="thumb" key={idx}>
+                        <img src={im.dataUrl} alt={im.name} />
+                        <button className="thumb-del" onClick={() => setImages(images.filter((_, j) => j !== idx))} aria-label="Rimuovi">×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <textarea placeholder="Scrivi a K AI..." value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
                 <div className="box-row">
-                  <button className="tool">{I.plus}</button>
+                  <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onFiles} />
+                  <button className="tool" onClick={() => fileRef.current?.click()} title="Allega immagini">{I.image}</button>
                   <span className="tool-chip">Web</span>
                   <span className="tool-chip">Tools</span>
-                  <button className="send" onClick={() => send()} disabled={busy || !input.trim()}>Invia {I.send}</button>
+                  <button className="send" onClick={() => send()} disabled={busy || (!input.trim() && images.length === 0)}>Invia {I.send}</button>
                 </div>
               </div>
               <div className="composer-meta">

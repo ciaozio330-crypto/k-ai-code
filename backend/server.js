@@ -32,9 +32,10 @@ app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), (req, re
     const planMap = {
       [process.env.STRIPE_PRICE_PRO]: 'pro',
       [process.env.STRIPE_PRICE_ENTERPRISE]: 'enterprise',
+      [process.env.STRIPE_PRICE_TEAM]: 'team',
     };
     const plan = planMap[priceId] || 'starter';
-    const limits = { free: 10, starter: 60, pro: 300, enterprise: 1200 };
+    const limits = { free: 10, starter: 60, pro: 300, enterprise: 1200, team: 3000 };
     db.prepare('UPDATE users SET plan = ?, queries_limit = ?, queries_used = 0 WHERE stripe_customer_id = ?')
       .run(plan, limits[plan], sub.customer);
   }
@@ -48,7 +49,7 @@ app.post('/webhooks/stripe', express.raw({ type: 'application/json' }), (req, re
   res.json({ received: true });
 });
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '25mb' }));
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -60,7 +61,8 @@ You write clean, correct, well-documented code in any language. You are especial
 - Paper/Spigot/Bukkit plugins (Java), Fabric/Forge mods (Java/Kotlin)
 - Maven/Gradle build configuration
 - General software in Python, JavaScript/TypeScript, Rust, Go, C#, and more
-Prefer complete, working code over fragments. Explain briefly, then give the code. When the user shows an error, diagnose the root cause before proposing a fix.`;
+Prefer complete, working code over fragments. Explain briefly, then give the code. When the user shows an error, diagnose the root cause before proposing a fix.
+When you output code that belongs in files, begin each code block's info string with the language followed by the file path, e.g. \`\`\`java src/main/java/com/example/Main.java so the files can be exported. If the user sends images, analyze them carefully.`;
 
 function buildSystem(prefs) {
   let s = SYSTEM_PROMPT;
@@ -366,8 +368,10 @@ app.get('/chat/:sessionId/messages', auth, (req, res) => {
 });
 
 app.post('/chat/message', auth, async (req, res) => {
-  const { sessionId, message, prefs } = req.body || {};
-  if (!sessionId || !message) return res.status(400).json({ error: 'sessionId and message required' });
+  const { sessionId, prefs } = req.body || {};
+  const message = (req.body && req.body.message ? String(req.body.message) : '').trim();
+  const images = Array.isArray(req.body && req.body.images) ? req.body.images.slice(0, 6) : [];
+  if (!sessionId || (!message && images.length === 0)) return res.status(400).json({ error: 'sessionId and message required' });
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
   if (user.queries_used >= user.queries_limit) {
@@ -378,12 +382,27 @@ app.post('/chat/message', auth, async (req, res) => {
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
   // Save user message and rebuild conversation history for context
+  const savedText = message || (images.length ? '[immagini allegate]' : '');
   db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?, ?, ?, ?)')
-    .run(randomUUID(), sessionId, 'user', message);
+    .run(randomUUID(), sessionId, 'user', savedText);
 
   const history = db.prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at ASC')
     .all(sessionId)
     .map((m) => ({ role: m.role, content: m.content }));
+
+  // Attach images to the current (last) user turn as image blocks for the model
+  if (images.length) {
+    const last = history[history.length - 1];
+    if (last && last.role === 'user') {
+      const blocks = [];
+      for (const dataUrl of images) {
+        const mm = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(String(dataUrl));
+        if (mm) blocks.push({ type: 'image', source: { type: 'base64', media_type: mm[1], data: mm[2] } });
+      }
+      blocks.push({ type: 'text', text: message || 'Analizza le immagini allegate.' });
+      last.content = blocks;
+    }
+  }
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -427,6 +446,7 @@ app.post('/billing/create-checkout', auth, async (req, res) => {
     starter: process.env.STRIPE_PRICE_STARTER,
     pro: process.env.STRIPE_PRICE_PRO,
     enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
+    team: process.env.STRIPE_PRICE_TEAM,
   };
   if (!priceMap[plan]) return res.status(400).json({ error: 'Invalid plan' });
 
@@ -470,6 +490,7 @@ app.post('/billing/create-checkout', auth, async (req, res) => {
     starter: process.env.STRIPE_PRICE_STARTER,
     pro: process.env.STRIPE_PRICE_PRO,
     enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
+    team: process.env.STRIPE_PRICE_TEAM,
   };
   if (!priceMap[plan]) return res.status(400).json({ error: 'Invalid plan' });
 
