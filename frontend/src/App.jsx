@@ -76,9 +76,9 @@ const PLANS = [
 ];
 
 const TEAMS = [
-  { id: 'team_low', name: 'Team Low', price: '200', cap4h: 420000, desc: 'Più potenza dell\'Enterprise, per team piccoli.' },
-  { id: 'team_medium', name: 'Team Medium', price: '300', cap4h: 600000, desc: 'Più token del Low, per team in crescita.' },
-  { id: 'team_max', name: 'Team Max', price: '400', cap4h: 850000, desc: 'Massima potenza condivisa per tutto il network.' },
+  { id: 'team_low', name: 'Team Low', price: '200', cap4h: 420000, seats: 3, desc: 'Più potenza dell\'Enterprise, per team piccoli.' },
+  { id: 'team_medium', name: 'Team Medium', price: '300', cap4h: 600000, seats: 6, desc: 'Più token del Low, per team in crescita.' },
+  { id: 'team_max', name: 'Team Max', price: '400', cap4h: 850000, seats: 10, desc: 'Massima potenza condivisa per tutto il network.' },
 ];
 
 const PLAN_NAMES = {
@@ -366,7 +366,7 @@ function UsageView({ user, onUpgrade }) {
             <div>
               <span className="tb-flag">Per team & network</span>
               <div className="team-title">Piani Team</div>
-              <p className="team-sub">Molti più token dell'Enterprise, condivisi tra il team. Fatturazione unica, fino a 10 postazioni.</p>
+              <p className="team-sub">Molti più token dell'Enterprise, condivisi tra il team. Fatturazione unica, da 3 a 10 postazioni in base al piano.</p>
             </div>
           </div>
           <div className="team-grid">
@@ -381,7 +381,7 @@ function UsageView({ user, onUpgrade }) {
                   <ul className="pt-feats">
                     <li>{fmtTokens(t.cap4h)} token ogni 4h</li>
                     <li>Nessun tetto settimanale</li>
-                    <li>Fino a 10 postazioni</li>
+                    <li>{t.seats} postazioni incluse</li>
                     <li>Fatturazione unica · supporto dedicato</li>
                   </ul>
                   {isCur
