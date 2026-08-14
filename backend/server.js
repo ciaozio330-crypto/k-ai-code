@@ -471,7 +471,10 @@ app.post('/chat/message', auth, async (req, res) => {
 
   const history = db.prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at ASC')
     .all(sessionId)
-    .map((m) => ({ role: m.role, content: m.content }));
+    .map((m) => ({ role: m.role, content: m.content }))
+    // scarta eventuali messaggi con content vuoto: l'API Anthropic li rifiuta
+    // e farebbero fallire l'intera richiesta (sintomo: "non risponde piu")
+    .filter((m) => (typeof m.content === 'string' ? m.content.trim().length > 0 : true));
 
   // Attach images to the current (last) user turn as image blocks for the model
   if (images.length) {
@@ -507,6 +510,25 @@ app.post('/chat/message', auth, async (req, res) => {
     });
 
     const finalMsg = await stream.finalMessage();
+
+    // Fallback: se lo stream non ha emesso testo (es. risposta con solo blocco
+    // "thinking"), ricostruisci il testo dai blocchi text della risposta finale.
+    if (!full.trim() && Array.isArray(finalMsg?.content)) {
+      const reconstructed = finalMsg.content
+        .filter((b) => b && b.type === 'text' && b.text)
+        .map((b) => b.text)
+        .join('\n')
+        .trim();
+      if (reconstructed) {
+        full = reconstructed;
+        res.write(`data: ${JSON.stringify({ type: 'text', content: full })}\n\n`);
+      }
+    }
+    // Non salvare mai un assistant vuoto: avvelenerebbe i turni successivi.
+    if (!full.trim()) {
+      full = 'Non sono riuscito a generare una risposta questa volta. Riprova pure.';
+      res.write(`data: ${JSON.stringify({ type: 'text', content: full })}\n\n`);
+    }
 
     db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?, ?, ?, ?)')
       .run(randomUUID(), sessionId, 'assistant', full);

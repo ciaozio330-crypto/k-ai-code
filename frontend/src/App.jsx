@@ -242,7 +242,7 @@ function Auth({ onAuth }) {
       <div className="auth-card">
         <div className="auth-top">
           <span className="wordmark">K AI</span>
-          <span className="tag">Code / Fable 5</span>
+          <span className="tag">Code</span>
         </div>
 
         {step === 'form' ? (<>
@@ -315,7 +315,7 @@ function UsageView({ user, onUpgrade }) {
       <div className="u-top">
         <span className="t">Uso</span>
         <span className="sub">Piano {PLAN_NAMES[planId] || planId}</span>
-        <span className="right"><span className="pill">Token · Fable 5</span></span>
+        <span className="right"><span className="pill">Token · K AI</span></span>
       </div>
       <div className="u-body">
         <div className="tok-grid">
@@ -338,7 +338,7 @@ function UsageView({ user, onUpgrade }) {
             const feat = [
               `${fmtTokens(p.cap4h)} token ogni 4h`,
               p.week ? `Tetto settimanale ${fmtTokens(p.week)}` : 'Nessun tetto settimanale',
-              'Modello Fable 5 · immagini · ZIP',
+              'Modello K AI · immagini · ZIP',
             ];
             return (
               <div className={`plan-tile ${isCur ? 'cur' : ''} ${p.id === 'pro' ? 'featured' : ''}`} key={p.id}>
@@ -737,7 +737,7 @@ function Chat({ token, onLogout }) {
         <div className="main">
           <div className="top">
             <span className="conv">{convTitle}</span>
-            <span className="model"><span className="dot" /> Fable 5 {I.chevron}</span>
+            <span className="model"><span className="dot" /> K AI {I.chevron}</span>
           </div>
 
           <div className="stream">
@@ -763,7 +763,7 @@ function Chat({ token, onLogout }) {
                   </div>
                 ) : (
                   <div className="turn-ai" key={i}>
-                    <div className="ai-head"><span className="k">K</span><span className="meta">Fable 5</span></div>
+                    <div className="ai-head"><span className="k">K</span><span className="meta">K AI</span></div>
                     <Content text={m.content} streaming={busy && i === messages.length - 1} />
                     {m.content && (
                       <div className="ai-actions">
@@ -809,7 +809,7 @@ function Chat({ token, onLogout }) {
               </div>
               <div className="composer-meta">
                 <span>Invio per inviare - Shift+Invio a capo</span>
-                <span>Fable 5 · {fmtTokens(dayLeft)} token nella finestra</span>
+                <span>K AI · {fmtTokens(dayLeft)} token nella finestra</span>
               </div>
             </div>
           </div>
