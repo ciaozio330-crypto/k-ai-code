@@ -67,6 +67,24 @@ You write clean, correct, well-documented code in any language. You are especial
 Prefer complete, working code over fragments. Explain briefly, then give the code. When the user shows an error, diagnose the root cause before proposing a fix.
 When you output code that belongs in files, begin each code block's info string with the language followed by the file path, e.g. \`\`\`java src/main/java/com/example/Main.java so the files can be exported. If the user sends images, analyze them carefully.`;
 
+// Prompt caching: without this, every message resends the ENTIRE conversation
+// history to the API at full price, so a long chat gets quadratically expensive
+// as it grows. Marking the last stable turn as a cache breakpoint means each
+// new message only pays full price for what's new since the last turn - the
+// rest is served from cache at a fraction of the cost (and doesn't count fully
+// against the user's token quota either, since we bill input+output tokens and
+// cached reads report separately).
+function cacheBreakpoint(text) {
+  return [{ type: 'text', text: String(text), cache_control: { type: 'ephemeral' } }];
+}
+function withHistoryCache(history) {
+  if (history.length < 2) return history;
+  const cutIdx = history.length - 2; // last turn that's now fixed and won't change again
+  return history.map((m, i) => (i === cutIdx && typeof m.content === 'string')
+    ? { role: m.role, content: cacheBreakpoint(m.content) }
+    : m);
+}
+
 function buildSystem(prefs) {
   let s = SYSTEM_PROMPT;
   if (prefs) {
@@ -375,8 +393,8 @@ app.post('/api/chat', auth, async (req, res) => {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: messages,
+      system: cacheBreakpoint(SYSTEM_PROMPT),
+      messages: withHistoryCache(messages),
     });
 
     let reply = '';
@@ -500,8 +518,8 @@ app.post('/chat/message', auth, async (req, res) => {
     const stream = client.messages.stream({
       model: MODEL,
       max_tokens: 4096,
-      system: buildSystem(prefs),
-      messages: history,
+      system: cacheBreakpoint(buildSystem(prefs)),
+      messages: withHistoryCache(history),
     });
 
     stream.on('text', (delta) => {
