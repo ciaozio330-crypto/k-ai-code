@@ -211,6 +211,7 @@ function Auth({ onAuth }) {
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
 
   const start = async () => {
     setErr(''); setLoading(true);
@@ -250,6 +251,24 @@ function Auth({ onAuth }) {
       <div className="auth-bg" aria-hidden="true">
         <VoxelTopographyGrid primaryColor="#34d3b8" wireColor="rgba(52, 211, 184, 0.35)" speed={0.012} tileSize={38} />
       </div>
+      <motion.button className="demo-btn" onClick={() => setShowDemo(true)}
+        initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, type: 'spring', stiffness: 260, damping: 24 }}
+        whileHover={{ y: -2 }} whileTap={{ scale: 0.96 }}>
+        <span className="demo-btn-play">▶</span> Guarda la demo
+      </motion.button>
+      <AnimatePresence>
+        {showDemo && (
+          <motion.div className="modal-backdrop" onClick={() => setShowDemo(false)}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
+            <motion.div className="video-modal" onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0, scale: 0.96, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}>
+              <button className="modal-close" onClick={() => setShowDemo(false)} aria-label="Chiudi">×</button>
+              <video src="/video/kai-code-intro.mp4" controls autoPlay playsInline />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="auth-card">
         <div className="auth-top">
           <span className="wordmark">K AI</span>
