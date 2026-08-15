@@ -68,17 +68,29 @@ export function VoxelTopographyGrid({
       topColorLUT[i] = `rgb(${r},${g},${b})`;
     }
 
+    // Ambient background: cap the logical render resolution and let the canvas
+    // stretch via CSS. Tile count (and thus per-frame draw-call count) scales
+    // with width*height, so this keeps cost flat on large/4K/ultrawide screens
+    // instead of scaling with the viewport.
+    const MAX_RENDER_WIDTH = 1280;
+    const MAX_RENDER_HEIGHT = 800;
+
     const handleResize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      width = container.clientWidth;
-      height = container.clientHeight;
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      const renderScale = Math.min(1, MAX_RENDER_WIDTH / cw, MAX_RENDER_HEIGHT / ch);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+
+      width = cw * renderScale;
+      height = ch * renderScale;
 
       canvas.width = width * dpr;
       canvas.height = height * dpr;
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
+      canvas.style.width = `${cw}px`;
+      canvas.style.height = `${ch}px`;
 
-      ctx.scale(dpr, dpr);
+      // setTransform (not scale) so repeated resizes don't compound the scale factor
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
@@ -113,8 +125,17 @@ export function VoxelTopographyGrid({
     // Respect the user's motion preference: render one static frame instead of looping
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    const draw = () => {
+    // Cap to ~30fps regardless of monitor refresh rate (120Hz+ displays were
+    // driving this at 2-3x the intended workload since rAF tracks the display's
+    // native rate, not a fixed 60fps).
+    const FRAME_INTERVAL = 1000 / 30;
+    let lastFrameTime = 0;
+
+    const draw = (now: number) => {
       if (!reduceMotion) {
+        animationFrameId = requestAnimationFrame(draw);
+        if (now - lastFrameTime < FRAME_INTERVAL) return;
+        lastFrameTime = now;
         time += speed;
         // Responsive, smooth lerping cursor tracking
         mouseRef.current.x += (mouseRef.current.targetX - mouseRef.current.x) * 0.32;
@@ -223,11 +244,9 @@ export function VoxelTopographyGrid({
           ctx.stroke();
         }
       }
-
-      if (!reduceMotion) animationFrameId = requestAnimationFrame(draw);
     };
 
-    draw();
+    draw(0);
 
     return () => {
       resizeObserver.disconnect();

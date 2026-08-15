@@ -87,6 +87,12 @@ const PLAN_NAMES = {
   team_low: 'Team Low', team_medium: 'Team Medium', team_max: 'Team Max',
 };
 
+const FLAVOR_ACCENT = {
+  elegant: { primary: '#34d3b8', wire: 'rgba(52, 211, 184, 0.3)' },
+  vivid: { primary: '#6d5cff', wire: 'rgba(109, 92, 255, 0.3)' },
+  terminal: { primary: '#3ff0a0', wire: 'rgba(63, 240, 160, 0.3)' },
+};
+
 function fmtTokens(n) {
   if (n == null) return '—';
   if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 ? 1 : 0) + 'M';
@@ -241,7 +247,7 @@ function Auth({ onAuth }) {
   return (
     <div className="auth-wrap">
       <div className="auth-bg" aria-hidden="true">
-        <VoxelTopographyGrid primaryColor="#34d3b8" wireColor="rgba(52, 211, 184, 0.35)" speed={0.012} />
+        <VoxelTopographyGrid primaryColor="#34d3b8" wireColor="rgba(52, 211, 184, 0.35)" speed={0.012} tileSize={38} />
       </div>
       <div className="auth-card">
         <div className="auth-top">
@@ -690,6 +696,7 @@ function Chat({ token, onLogout }) {
   const initials = user ? user.email.slice(0, 2).toUpperCase() : 'K';
   const planLabel = user ? (PLAN_NAMES[user.plan] || user.plan) : '';
   const convTitle = messages.find((m) => m.role === 'user')?.content?.slice(0, 46) || 'Nuova conversazione';
+  const accent = FLAVOR_ACCENT[prefs.flavor] || FLAVOR_ACCENT.elegant;
 
   return (
     <div className="app">
@@ -745,8 +752,11 @@ function Chat({ token, onLogout }) {
           </div>
 
           <div className="stream">
-            <div className="stream-inner">
-              {messages.length === 0 ? (
+            {messages.length === 0 ? (
+              <div className="welcome-stage">
+                <div className="welcome-bg" aria-hidden="true">
+                  <VoxelTopographyGrid primaryColor={accent.primary} wireColor={accent.wire} speed={0.01} tileSize={42} maxHeight={50} />
+                </div>
                 <div className="welcome">
                   <div className="k">K</div>
                   <h2>Cosa costruiamo oggi?</h2>
@@ -755,7 +765,10 @@ function Chat({ token, onLogout }) {
                     {EXAMPLES.map((ex) => <button key={ex} className="chip-ex" onClick={() => send(ex)}>{ex}</button>)}
                   </div>
                 </div>
-              ) : messages.map((m, i) => (
+              </div>
+            ) : (
+            <div className="stream-inner">
+              {messages.map((m, i) => (
                 m.role === 'user' ? (
                   <div className="turn-user" key={i}>
                     {m.images && m.images.length > 0 && (
@@ -785,6 +798,7 @@ function Chat({ token, onLogout }) {
               ))}
               <div ref={endRef} />
             </div>
+            )}
           </div>
 
           <div className="composer">
