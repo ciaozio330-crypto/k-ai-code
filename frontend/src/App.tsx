@@ -123,6 +123,8 @@ const I = {
   send: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4"><path d="M5 12h13M12 5l7 7-7 7"/></svg>,
   chevron: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8f939a" strokeWidth="3"><path d="M6 9l6 6 6-6"/></svg>,
   monitor: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>,
+  eye: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>,
+  eyeOff: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.6 10.6 0 0112 5c7 0 10.5 7 10.5 7a15.6 15.6 0 01-3.4 4.4M6.7 6.7C3.4 8.8 1.5 12 1.5 12s3.5 7 10.5 7c1.5 0 2.8-.3 4-.8"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/></svg>,
   sun: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>,
   moon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>,
 };
@@ -212,6 +214,7 @@ function Auth({ onAuth }) {
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const start = async () => {
     setErr(''); setLoading(true);
@@ -285,8 +288,14 @@ function Auth({ onAuth }) {
               </label>
               <label className="field">
                 <span className="lbl">Password</span>
-                <input type="password" placeholder="La tua password" value={password}
-                  onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && start()} />
+                <div className="field-pw">
+                  <input type={showPassword ? 'text' : 'password'} placeholder="La tua password" value={password}
+                    onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && start()} />
+                  <button type="button" className="field-pw-toggle" onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Nascondi password' : 'Mostra password'} tabIndex={-1}>
+                    {showPassword ? I.eyeOff : I.eye}
+                  </button>
+                </div>
               </label>
               {err && <p className="err">{err}</p>}
               <button className="btn" style={{ marginTop: 6 }} onClick={start} disabled={loading || !email || !password}>
