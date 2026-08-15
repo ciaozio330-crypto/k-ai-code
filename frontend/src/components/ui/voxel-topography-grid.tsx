@@ -35,6 +35,9 @@ export function VoxelTopographyGrid({
     let width = 0;
     let height = 0;
     let time = 0;
+    // Ratio between the internal (possibly downscaled) render resolution and the
+    // real on-screen CSS size, used to map cursor coordinates into grid space.
+    let renderScale = 1;
 
     // Fast Hex to RGB conversion
     const hexToRgb = (hex: string) => {
@@ -78,7 +81,7 @@ export function VoxelTopographyGrid({
     const handleResize = () => {
       const cw = container.clientWidth;
       const ch = container.clientHeight;
-      const renderScale = Math.min(1, MAX_RENDER_WIDTH / cw, MAX_RENDER_HEIGHT / ch);
+      renderScale = Math.min(1, MAX_RENDER_WIDTH / cw, MAX_RENDER_HEIGHT / ch);
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
 
       width = cw * renderScale;
@@ -129,7 +132,7 @@ export function VoxelTopographyGrid({
     // driving this at 2-3x the intended workload since rAF tracks the display's
     // native rate, not a fixed 60fps).
     const FRAME_INTERVAL = 1000 / 30;
-    let lastFrameTime = 0;
+    let lastFrameTime = -Infinity; // ensures the very first frame always draws immediately
 
     const draw = (now: number) => {
       if (!reduceMotion) {
@@ -142,8 +145,11 @@ export function VoxelTopographyGrid({
         mouseRef.current.y += (mouseRef.current.targetY - mouseRef.current.y) * 0.32;
       }
 
-      const mx = mouseRef.current.x;
-      const my = mouseRef.current.y;
+      // mouseRef is tracked in real screen-pixel space (from getBoundingClientRect),
+      // but the grid is laid out in the internal (possibly downscaled) render space —
+      // rescale so the raised hotspot actually sits under the cursor.
+      const mx = mouseRef.current.x * renderScale;
+      const my = mouseRef.current.y * renderScale;
 
       // Dark background clear
       ctx.fillStyle = '#020617'; // matches slate-950
