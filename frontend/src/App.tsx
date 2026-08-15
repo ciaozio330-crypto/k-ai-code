@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
 import JSZip from 'jszip';
+import { VoxelTopographyGrid } from '@/components/ui/voxel-topography-grid';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -239,6 +240,9 @@ function Auth({ onAuth }) {
 
   return (
     <div className="auth-wrap">
+      <div className="auth-bg" aria-hidden="true">
+        <VoxelTopographyGrid primaryColor="#34d3b8" wireColor="rgba(52, 211, 184, 0.35)" speed={0.012} />
+      </div>
       <div className="auth-card">
         <div className="auth-top">
           <span className="wordmark">K AI</span>
