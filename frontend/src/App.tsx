@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, Fragment } from 'react';
 import JSZip from 'jszip';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { VoxelTopographyGrid } from '@/components/ui/voxel-topography-grid';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -255,40 +256,46 @@ function Auth({ onAuth }) {
           <span className="tag">Code</span>
         </div>
 
-        {step === 'form' ? (<>
-          <p className="auth-lead">Assistente di programmazione per sviluppatori Minecraft. Plugin, mod e codice in ogni linguaggio.</p>
-          <label className="field">
-            <span className="lbl">Email</span>
-            <input type="email" placeholder="dev@server.net" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
-          <label className="field">
-            <span className="lbl">Password</span>
-            <input type="password" placeholder="La tua password" value={password}
-              onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && start()} />
-          </label>
-          {err && <p className="err">{err}</p>}
-          <button className="btn" style={{ marginTop: 6 }} onClick={start} disabled={loading || !email || !password}>
-            {loading ? '...' : mode === 'login' ? 'Accedi' : 'Crea account'}
-          </button>
-          <div><button className="link" onClick={switchMode}>
-            {mode === 'login' ? 'Non hai un account? Registrati' : 'Hai gia un account? Accedi'}
-          </button></div>
-        </>) : (<>
-          <p className="auth-lead">Ti abbiamo inviato un codice a 6 cifre a <b>{email}</b>. Inseriscilo per {mode === 'login' ? 'accedere' : 'completare la registrazione'}.</p>
-          <label className="field">
-            <span className="lbl">Codice di verifica</span>
-            <input type="text" inputMode="numeric" maxLength={6} placeholder="123456" value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => e.key === 'Enter' && verify()} />
-          </label>
-          {err && <p className="err">{err}</p>}
-          <button className="btn" style={{ marginTop: 6 }} onClick={verify} disabled={loading || code.length < 6}>
-            {loading ? '...' : 'Verifica'}
-          </button>
-          <div style={{ display: 'flex', gap: 14 }}>
-            <button className="link" onClick={() => { setStep('form'); setErr(''); }}>Indietro</button>
-            <button className="link" onClick={start} disabled={loading}>Rinvia codice</button>
-          </div>
-        </>)}
+        <AnimatePresence mode="wait" initial={false}>
+          {step === 'form' ? (
+            <motion.div key="form" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}>
+              <p className="auth-lead">Assistente di programmazione per sviluppatori Minecraft. Plugin, mod e codice in ogni linguaggio.</p>
+              <label className="field">
+                <span className="lbl">Email</span>
+                <input type="email" placeholder="dev@server.net" value={email} onChange={(e) => setEmail(e.target.value)} />
+              </label>
+              <label className="field">
+                <span className="lbl">Password</span>
+                <input type="password" placeholder="La tua password" value={password}
+                  onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && start()} />
+              </label>
+              {err && <p className="err">{err}</p>}
+              <button className="btn" style={{ marginTop: 6 }} onClick={start} disabled={loading || !email || !password}>
+                {loading ? '...' : mode === 'login' ? 'Accedi' : 'Crea account'}
+              </button>
+              <div><button className="link" onClick={switchMode}>
+                {mode === 'login' ? 'Non hai un account? Registrati' : 'Hai gia un account? Accedi'}
+              </button></div>
+            </motion.div>
+          ) : (
+            <motion.div key="code" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}>
+              <p className="auth-lead">Ti abbiamo inviato un codice a 6 cifre a <b>{email}</b>. Inseriscilo per {mode === 'login' ? 'accedere' : 'completare la registrazione'}.</p>
+              <label className="field">
+                <span className="lbl">Codice di verifica</span>
+                <input type="text" inputMode="numeric" maxLength={6} placeholder="123456" value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => e.key === 'Enter' && verify()} />
+              </label>
+              {err && <p className="err">{err}</p>}
+              <button className="btn" style={{ marginTop: 6 }} onClick={verify} disabled={loading || code.length < 6}>
+                {loading ? '...' : 'Verifica'}
+              </button>
+              <div style={{ display: 'flex', gap: 14 }}>
+                <button className="link" onClick={() => { setStep('form'); setErr(''); }}>Indietro</button>
+                <button className="link" onClick={start} disabled={loading}>Rinvia codice</button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -342,7 +349,8 @@ function UsageView({ user, onUpgrade }) {
         </div>
 
         <div className="plans-h">Scegli il tuo piano</div>
-        <div className="plan-grid">
+        <motion.div className="plan-grid" initial="hidden" animate="show"
+          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}>
           {PLANS.map((p) => {
             const isCur = p.id === planId;
             const feat = [
@@ -351,7 +359,9 @@ function UsageView({ user, onUpgrade }) {
               'Modello K AI · immagini · ZIP',
             ];
             return (
-              <div className={`plan-tile ${isCur ? 'cur' : ''} ${p.id === 'pro' ? 'featured' : ''}`} key={p.id}>
+              <motion.div className={`plan-tile ${isCur ? 'cur' : ''} ${p.id === 'pro' ? 'featured' : ''}`} key={p.id}
+                variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
+                transition={{ type: 'spring', stiffness: 280, damping: 28 }}>
                 {p.id === 'pro' && <span className="plan-flag">Consigliato</span>}
                 <div className="pt-name">{p.name}</div>
                 {p.id === 'free'
@@ -366,10 +376,10 @@ function UsageView({ user, onUpgrade }) {
                   : isCur
                   ? <button className="pt-btn cur" disabled>Piano attuale</button>
                   : <button className="pt-btn" onClick={() => onUpgrade(p.id)}>Passa a {p.name}</button>}
-              </div>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
 
         <div className="team-sec">
           <div className="team-head">
@@ -379,11 +389,14 @@ function UsageView({ user, onUpgrade }) {
               <p className="team-sub">Molti più token dell'Enterprise, condivisi tra il team. Fatturazione unica, da 3 a 10 postazioni in base al piano.</p>
             </div>
           </div>
-          <div className="team-grid">
+          <motion.div className="team-grid" initial="hidden" animate="show"
+            variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}>
             {TEAMS.map((t) => {
               const isCur = t.id === planId;
               return (
-                <div className={`team-tile ${isCur ? 'cur' : ''} ${t.id === 'team_medium' ? 'featured' : ''}`} key={t.id}>
+                <motion.div className={`team-tile ${isCur ? 'cur' : ''} ${t.id === 'team_medium' ? 'featured' : ''}`} key={t.id}
+                  variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
+                  transition={{ type: 'spring', stiffness: 280, damping: 28 }}>
                   {t.id === 'team_medium' && <span className="plan-flag">Più scelto</span>}
                   <div className="pt-name">{t.name}</div>
                   <div className="pt-price"><b>{t.price}</b><span>€ / mese</span></div>
@@ -397,10 +410,10 @@ function UsageView({ user, onUpgrade }) {
                   {isCur
                     ? <button className="pt-btn cur" disabled>Piano attuale</button>
                     : <button className="pt-btn" onClick={() => onUpgrade(t.id)}>Passa a {t.name}</button>}
-                </div>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>
@@ -704,8 +717,14 @@ function Chat({ token, onLogout }) {
         <div className="rail">
           <div className="mono-k">K</div>
           <div className="nav">
-            <button className={`ico ${view === 'chat' ? 'active' : ''}`} onClick={() => setView('chat')}>{I.chat}</button>
-            <button className={`ico ${view === 'usage' ? 'active' : ''}`} onClick={() => setView('usage')}>{I.chart}</button>
+            {['chat', 'usage'].map((v) => (
+              <button key={v} className={`ico ${view === v ? 'active' : ''}`} onClick={() => setView(v)}>
+                {view === v && (
+                  <motion.span layoutId="rail-indicator" className="ico-indicator" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />
+                )}
+                {v === 'chat' ? I.chat : I.chart}
+              </button>
+            ))}
           </div>
           <div className="foot">
             <button className={`ico ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')}>{I.gear}</button>
@@ -727,12 +746,17 @@ function Chat({ token, onLogout }) {
             {sessions.filter((s) => !s.empty).length === 0 && (
               <div className="conv-empty">Nessuna conversazione salvata.</div>
             )}
-            {sessions.filter((s) => !s.empty).map((s) => (
-              <div key={s.id} className={`conv-item ${s.id === sessionId ? 'active' : ''}`} onClick={() => openSession(s.id)}>
-                <span className="ci-title">{s.title}</span>
-                <button className="ci-del" onClick={(e) => deleteSession(s.id, e)} title="Elimina" aria-label="Elimina">×</button>
-              </div>
-            ))}
+            <AnimatePresence initial={false}>
+              {sessions.filter((s) => !s.empty).map((s) => (
+                <motion.div key={s.id} layout
+                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  className={`conv-item ${s.id === sessionId ? 'active' : ''}`} onClick={() => openSession(s.id)}>
+                  <span className="ci-title">{s.title}</span>
+                  <button className="ci-del" onClick={(e) => deleteSession(s.id, e)} title="Elimina" aria-label="Elimina">×</button>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
           <div className="side-foot">
             {user && day && (<>
@@ -757,29 +781,37 @@ function Chat({ token, onLogout }) {
                 <div className="welcome-bg" aria-hidden="true">
                   <VoxelTopographyGrid primaryColor={accent.primary} wireColor={accent.wire} speed={0.01} tileSize={42} maxHeight={50} />
                 </div>
-                <div className="welcome">
+                <motion.div className="welcome" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 26 }}>
                   <div className="k">K</div>
                   <h2>Cosa costruiamo oggi?</h2>
                   <p>Plugin, mod, script o debugging in qualsiasi linguaggio. Il codice e monocromatico, la sintassi si legge dal peso.</p>
-                  <div className="chips">
-                    {EXAMPLES.map((ex) => <button key={ex} className="chip-ex" onClick={() => send(ex)}>{ex}</button>)}
-                  </div>
-                </div>
+                  <motion.div className="chips" initial="hidden" animate="show"
+                    variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.15 } } }}>
+                    {EXAMPLES.map((ex) => (
+                      <motion.button key={ex} className="chip-ex" onClick={() => send(ex)}
+                        variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 26 }}
+                        whileHover={{ y: -3 }} whileTap={{ scale: 0.97 }}>
+                        {ex}
+                      </motion.button>
+                    ))}
+                  </motion.div>
+                </motion.div>
               </div>
             ) : (
             <div className="stream-inner">
               {messages.map((m, i) => (
                 m.role === 'user' ? (
-                  <div className="turn-user" key={i}>
+                  <motion.div className="turn-user" key={i} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 320, damping: 30 }}>
                     {m.images && m.images.length > 0 && (
                       <div className="u-images">
                         {m.images.map((src, j) => <img key={j} src={src} alt="allegato" />)}
                       </div>
                     )}
                     {m.content && <div className="u-bubble">{m.content}</div>}
-                  </div>
+                  </motion.div>
                 ) : (
-                  <div className="turn-ai" key={i}>
+                  <motion.div className="turn-ai" key={i} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 320, damping: 30 }}>
                     <div className="ai-head"><span className="k">K</span><span className="meta">K AI</span></div>
                     <Content text={m.content} streaming={busy && i === messages.length - 1} />
                     {m.content && (
@@ -793,7 +825,7 @@ function Chat({ token, onLogout }) {
                         })()}
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 )
               ))}
               <div ref={endRef} />
@@ -833,16 +865,21 @@ function Chat({ token, onLogout }) {
           </div>
         </div>
       </div>
-      {(view === 'usage' || view === 'settings') && (
-        <div className="modal-backdrop" onClick={() => setView('chat')}>
-          <div className="modal-window" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setView('chat')} aria-label="Chiudi">×</button>
-            {view === 'usage'
-              ? <UsageView user={user} onUpgrade={upgrade} />
-              : <SettingsView user={user} prefs={prefs} onChange={setPrefs} onGoUsage={() => setView('usage')} onUpgrade={upgrade} onDeleteAccount={deleteAccount} onLogout={onLogout} />}
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {(view === 'usage' || view === 'settings') && (
+          <motion.div className="modal-backdrop" onClick={() => setView('chat')}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
+            <motion.div className="modal-window" onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0, scale: 0.96, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}>
+              <button className="modal-close" onClick={() => setView('chat')} aria-label="Chiudi">×</button>
+              {view === 'usage'
+                ? <UsageView user={user} onUpgrade={upgrade} />
+                : <SettingsView user={user} prefs={prefs} onChange={setPrefs} onGoUsage={() => setView('usage')} onUpgrade={upgrade} onDeleteAccount={deleteAccount} onLogout={onLogout} />}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -850,5 +887,9 @@ function Chat({ token, onLogout }) {
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const logout = () => { localStorage.removeItem('token'); setToken(null); };
-  return token ? <Chat token={token} onLogout={logout} /> : <Auth onAuth={setToken} />;
+  return (
+    <MotionConfig reducedMotion="user">
+      {token ? <Chat token={token} onLogout={logout} /> : <Auth onAuth={setToken} />}
+    </MotionConfig>
+  );
 }
