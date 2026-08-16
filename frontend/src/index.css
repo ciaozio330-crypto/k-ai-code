@@ -299,10 +299,14 @@ a:hover { color: var(--accent-2); }
   position: relative; height: 100%; min-height: 420px;
   display: flex; align-items: center; justify-content: center; padding: 0 28px;
 }
+/* Sfondo decorativo dietro il messaggio di benvenuto.
+   L'opacità va tenuta bassa: il titolo ci sta sopra e a intensità piena il
+   teal ne divora il contrasto rendendolo quasi illeggibile. La maschera
+   radiale stretta lo confina al centro, lontano dai bordi dell'area chat. */
 .welcome-bg {
-  position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: .45;
-  -webkit-mask-image: radial-gradient(55% 55% at 50% 48%, #000 0%, transparent 72%);
-  mask-image: radial-gradient(55% 55% at 50% 48%, #000 0%, transparent 72%);
+  position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: .17;
+  -webkit-mask-image: radial-gradient(46% 48% at 50% 48%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(46% 48% at 50% 48%, #000 0%, transparent 70%);
 }
 .welcome { position: relative; z-index: 1; max-width: 580px; margin: 0 auto; text-align: center; }
 .welcome .k {
@@ -340,19 +344,11 @@ a:hover { color: var(--accent-2); }
 .ai-caret { display: inline-block; width: 8px; height: 16px; border-radius: 2px; background: var(--accent); vertical-align: -3px; margin-left: 2px; animation: blink 1.1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 
-/* ---- CODE CARD ---- */
-.code-card { border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface-2); box-shadow: var(--shadow-sm); }
-.code-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border-2); background: var(--surface-3); }
-.code-head .fn { font-family: var(--f-mono); font-size: 11.5px; color: var(--text); font-weight: 600; }
-.code-head .lg { font-size: 10.5px; color: var(--text-4); text-transform: uppercase; letter-spacing: 0.06em; }
-.code-head .act { margin-left: auto; display: flex; gap: 12px; font-size: 11px; }
-.code-head .act-chip { font-family: var(--f-mono); font-size: 11px; color: var(--text-3); font-weight: 500; transition: color .15s; }
-.code-head .act-chip:hover { color: var(--accent); }
-.code-body { font-family: var(--f-mono); font-size: 12.5px; line-height: 1.75; color: var(--text-2); padding: 14px 0; overflow-x: auto; }
-.cl { display: flex; gap: 18px; padding: 0 16px; white-space: pre; }
-.cl .n { color: var(--faint); width: 24px; text-align: right; flex: 0 0 24px; user-select: none; }
+/* ---- CODE CARD ----
+   Gli stili del blocco di codice vivono in styles/components.css, insieme
+   alla palette di evidenziazione della sintassi. */
 
-.ai-actions { display: flex; gap: 8px; padding-top: 2px; }
+.ai-actions { display: flex; gap: 8px; padding-top: 2px; flex-wrap: wrap; }
 .act-chip {
   display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-3);
   border: 1px solid var(--border); border-radius: var(--r-xs); padding: 6px 11px;

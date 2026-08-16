@@ -2,20 +2,49 @@
 <html lang="it">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="alternate icon" type="image/png" href="/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>K AI Code</title>
-    <meta name="description" content="Assistente di programmazione AI per sviluppatori Minecraft: plugin, mod e codice in ogni linguaggio." />
-    <meta property="og:title" content="K AI Code" />
-    <meta property="og:description" content="Assistente di programmazione AI per sviluppatori Minecraft: plugin, mod e codice in ogni linguaggio." />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+
+    <title>K AI Code — Assistente di programmazione per sviluppatori Minecraft</title>
+    <meta
+      name="description"
+      content="Plugin Spigot e Paper, mod Fabric e Forge, debug degli stack trace ed export in ZIP. Descrivi cosa ti serve in italiano e ricevi file completi e compilabili. Piano gratuito senza carta."
+    />
+    <meta name="theme-color" content="#06080c" />
+    <meta name="color-scheme" content="dark light" />
+
+    <!-- Il font viene richiesto da index.css: il preconnect apre la connessione
+         in anticipo, così il testo non resta invisibile aspettando il DNS+TLS. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <meta property="og:site_name" content="K AI Code" />
+    <meta property="og:title" content="K AI Code — Scrivi il plugin, non la documentazione" />
+    <meta
+      property="og:description"
+      content="L'assistente di programmazione che conosce le API di Minecraft versione per versione. Plugin, mod, script e debugging in ogni linguaggio."
+    />
     <meta property="og:image" content="/brand/voxel-mark.png" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="it_IT" />
+
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="K AI Code — Scrivi il plugin, non la documentazione" />
+    <meta
+      name="twitter:description"
+      content="Plugin Spigot e Paper, mod Fabric e Forge, debug e export ZIP. In italiano, con codice che compila."
+    />
     <meta name="twitter:image" content="/brand/voxel-mark.png" />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      K AI Code ha bisogno di JavaScript per funzionare. Attivalo nelle
+      impostazioni del browser e ricarica la pagina.
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -7,6 +7,10 @@ export interface VoxelTopographyGridProps {
   wireColor?: string;
   speed?: number;
   className?: string;
+  /** Colore di fondo del canvas; va accordato al tema per evitare bande scure. */
+  bgColor?: string;
+  /** Disattiva il rilievo che segue il cursore (per sfondi puramente decorativi). */
+  interactive?: boolean;
 }
 
 export function VoxelTopographyGrid({
@@ -16,6 +20,8 @@ export function VoxelTopographyGrid({
   wireColor = 'rgba(129, 140, 248, 0.4)',
   speed = 0.015,
   className = '',
+  bgColor = '#020617',
+  interactive = true,
 }: VoxelTopographyGridProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -78,6 +84,10 @@ export function VoxelTopographyGrid({
     const MAX_RENDER_WIDTH = 1280;
     const MAX_RENDER_HEIGHT = 800;
 
+    // True una volta che `draw` esiste ed è stato eseguito almeno una volta.
+    // Serve perché handleResize gira anche prima che `draw` sia definita.
+    let started = false;
+
     const handleResize = () => {
       const cw = container.clientWidth;
       const ch = container.clientHeight;
@@ -94,6 +104,14 @@ export function VoxelTopographyGrid({
 
       // setTransform (not scale) so repeated resizes don't compound the scale factor
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Assegnare canvas.width/height azzera la superficie. Se il loop è in
+      // pausa — tab in background, canvas fuori schermo, o preferenza
+      // "riduci animazioni" — nessuno ridisegnerebbe e resterebbe un
+      // rettangolo nero. ResizeObserver scatta sempre una volta al mount,
+      // quindi senza questo ridisegno il caso reduced-motion non vedrebbe
+      // mai il terreno.
+      if (started && !running) draw(performance.now());
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
@@ -116,8 +134,31 @@ export function VoxelTopographyGrid({
       mouseRef.current.targetY = -1000;
     };
 
-    window.addEventListener('pointermove', handlePointerMove, { passive: true });
-    container.addEventListener('pointerleave', handlePointerLeave, { passive: true });
+    if (interactive) {
+      window.addEventListener('pointermove', handlePointerMove, { passive: true });
+      container.addEventListener('pointerleave', handlePointerLeave, { passive: true });
+    }
+
+    // Sospende il loop quando il canvas non è visibile.
+    //
+    // Su una pagina lunga più sfondi voxel coesistono: senza questo, ognuno
+    // continuerebbe a disegnare a 30fps anche a schermate di distanza dallo
+    // scroll corrente, bruciando CPU e batteria per pixel che nessuno vede.
+    // Stesso discorso per la tab in background.
+    let onScreen = true;
+    let running = false;
+
+    const intersectionObserver = new IntersectionObserver(
+      ([entry]) => {
+        onScreen = entry.isIntersecting;
+        syncLoop();
+      },
+      { rootMargin: '120px' }
+    );
+    intersectionObserver.observe(container);
+
+    const handleVisibility = () => syncLoop();
+    document.addEventListener('visibilitychange', handleVisibility);
 
     // Constants for grid iteration
     const tileW = tileSize * 0.866025; // cos(30 deg)
@@ -135,7 +176,7 @@ export function VoxelTopographyGrid({
     let lastFrameTime = -Infinity; // ensures the very first frame always draws immediately
 
     const draw = (now: number) => {
-      if (!reduceMotion) {
+      if (running) {
         animationFrameId = requestAnimationFrame(draw);
         if (now - lastFrameTime < FRAME_INTERVAL) return;
         lastFrameTime = now;
@@ -151,8 +192,8 @@ export function VoxelTopographyGrid({
       const mx = mouseRef.current.x * renderScale;
       const my = mouseRef.current.y * renderScale;
 
-      // Dark background clear
-      ctx.fillStyle = '#020617'; // matches slate-950
+      // Background clear
+      ctx.fillStyle = bgColor;
       ctx.fillRect(0, 0, width, height);
 
       const gridCols = Math.ceil(width / tileW) + 4;
@@ -252,20 +293,52 @@ export function VoxelTopographyGrid({
       }
     };
 
+    // Avvia o ferma il loop in base a visibilità della tab e del canvas.
+    // Definita qui (function declaration) perché viene richiamata dagli
+    // observer registrati più sopra, prima di questo punto.
+    function syncLoop() {
+      const shouldRun = onScreen && !document.hidden && !reduceMotion;
+      if (shouldRun === running) return;
+      running = shouldRun;
+      if (running) {
+        // Riparte dal frame corrente: senza questo il primo frame dopo una
+        // pausa lunga verrebbe scartato dal throttle e la ripresa sembrerebbe
+        // bloccata per una frazione di secondo.
+        lastFrameTime = -Infinity;
+        animationFrameId = requestAnimationFrame(draw);
+      } else {
+        cancelAnimationFrame(animationFrameId);
+      }
+    }
+
+    // Primo frame sempre disegnato, anche con reduced-motion attivo:
+    // lo sfondo deve comunque esistere, semplicemente resta statico.
+    started = true;
     draw(0);
+    syncLoop();
 
     return () => {
       resizeObserver.disconnect();
+      intersectionObserver.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('pointermove', handlePointerMove);
       container.removeEventListener('pointerleave', handlePointerLeave);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [tileSize, maxHeight, primaryColor, wireColor, speed]);
+  }, [tileSize, maxHeight, primaryColor, wireColor, speed, bgColor, interactive]);
 
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full overflow-hidden cursor-pointer touch-none ${className}`}
+      // Non-interattivo => `pointer-events-none`, altrimenti un canvas di sfondo
+      // a tutto schermo intercetterebbe lo scroll touch e i click sui contenuti
+      // che gli stanno sopra.
+      className={
+        'relative w-full h-full overflow-hidden ' +
+        (interactive ? 'cursor-pointer ' : 'pointer-events-none ') +
+        className
+      }
+      aria-hidden="true"
     >
       <canvas ref={canvasRef} className="block w-full h-full" />
     </div>

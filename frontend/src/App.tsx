@@ -1,7 +1,16 @@
-import { useEffect, useRef, useState, Fragment } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback, Fragment, lazy, Suspense } from 'react';
 import JSZip from 'jszip';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { VoxelTopographyGrid } from '@/components/ui/voxel-topography-grid';
+import { CodeBlock } from '@/components/ui/code-block';
+import { CommandPalette } from '@/components/ui/command-palette';
+import type { Command } from '@/components/ui/command-palette';
+import { useToast } from '@/components/ui/toast';
+import { PLANS, TEAMS, PLAN_NAMES, FLAVOR_ACCENT } from '@/lib/plans';
+
+// La landing è un blocco grosso e indipendente: caricarla a richiesta tiene
+// leggero il bundle iniziale per chi è già loggato e va dritto in chat.
+const Landing = lazy(() => import('@/components/landing/Landing'));
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -43,6 +52,14 @@ function extractCodeFiles(text) {
   return files;
 }
 
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
 async function downloadZip(files, baseName = 'k-ai-code') {
   const zip = new JSZip();
   const used = {};
@@ -56,11 +73,12 @@ async function downloadZip(files, baseName = 'k-ai-code') {
     zip.file(n, f.content);
   }
   const blob = await zip.generateAsync({ type: 'blob' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `${baseName}.zip`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  saveBlob(blob, `${baseName}.zip`);
+}
+
+/** Scarica un singolo file di testo senza passare dallo ZIP. */
+function downloadFile(name, content) {
+  saveBlob(new Blob([content], { type: 'text/plain;charset=utf-8' }), name);
 }
 
 const EXAMPLES = [
@@ -69,30 +87,6 @@ const EXAMPLES = [
   'Perche ottengo NullPointerException qui?',
   'Script Python per backup automatici del server',
 ];
-
-const PLANS = [
-  { id: 'free', name: 'Free', price: '0', cap4h: 15000, week: 50000, desc: 'Per provare. Cap basso con tetto settimanale.' },
-  { id: 'starter', name: 'Starter', price: '15', cap4h: 40000, week: 200000, desc: 'Per iniziare. Qualche reset durante la giornata.' },
-  { id: 'pro', name: 'Pro', price: '60', cap4h: 120000, week: null, desc: 'Molti token. Lavori quotidiani senza pensieri.' },
-  { id: 'enterprise', name: 'Enterprise', price: '140', cap4h: 280000, week: null, desc: 'Lavori complessi senza cap, salvo raffiche intense.' },
-];
-
-const TEAMS = [
-  { id: 'team_low', name: 'Team Low', price: '200', cap4h: 420000, seats: 3, desc: 'Più potenza dell\'Enterprise, per team piccoli.' },
-  { id: 'team_medium', name: 'Team Medium', price: '300', cap4h: 600000, seats: 6, desc: 'Più token del Low, per team in crescita.' },
-  { id: 'team_max', name: 'Team Max', price: '400', cap4h: 850000, seats: 10, desc: 'Massima potenza condivisa per tutto il network.' },
-];
-
-const PLAN_NAMES = {
-  free: 'Free', starter: 'Starter', pro: 'Pro', enterprise: 'Enterprise',
-  team_low: 'Team Low', team_medium: 'Team Medium', team_max: 'Team Max',
-};
-
-const FLAVOR_ACCENT = {
-  elegant: { primary: '#34d3b8', wire: 'rgba(52, 211, 184, 0.3)' },
-  vivid: { primary: '#6d5cff', wire: 'rgba(109, 92, 255, 0.3)' },
-  terminal: { primary: '#3ff0a0', wire: 'rgba(63, 240, 160, 0.3)' },
-};
 
 function fmtTokens(n) {
   if (n == null) return '—';
@@ -119,14 +113,18 @@ const I = {
   plus: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 5v14M5 12h14"/></svg>,
   image: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg>,
   zip: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>,
-  search: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9a9ea6" strokeWidth="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg>,
-  send: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4"><path d="M5 12h13M12 5l7 7-7 7"/></svg>,
-  chevron: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8f939a" strokeWidth="3"><path d="M6 9l6 6 6-6"/></svg>,
-  monitor: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>,
+  search: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg>,
+  send: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M5 12h13M12 5l7 7-7 7"/></svg>,
+  chevron: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 9l6 6 6-6"/></svg>,
+  down: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>,
+  copy: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>,
+  check: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>,
+  retry: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-3.2-6.9"/><path d="M21 3v6h-6"/></svg>,
+  trash: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/></svg>,
+  logout: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 17l5-5-5-5M20 12H9M12 3H6a2 2 0 00-2 2v14a2 2 0 002 2h6"/></svg>,
   eye: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>,
   eyeOff: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.6 10.6 0 0112 5c7 0 10.5 7 10.5 7a15.6 15.6 0 01-3.4 4.4M6.7 6.7C3.4 8.8 1.5 12 1.5 12s3.5 7 10.5 7c1.5 0 2.8-.3 4-.8"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/></svg>,
-  sun: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>,
-  moon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>,
+  back: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>,
 };
 
 function inline(text, kb) {
@@ -180,32 +178,46 @@ function Content({ text, streaming }) {
   parts.forEach((part, i) => {
     if (i % 2 === 1) {
       const nl = part.indexOf('\n');
-      const lang = nl > -1 ? part.slice(0, nl).trim() : '';
+      const info = (nl > -1 ? part.slice(0, nl) : '').trim();
       const body = (nl > -1 ? part.slice(nl + 1) : part).replace(/\n$/, '');
-      const lines = body.split('\n');
+
+      // L'info string può essere "java" oppure "java src/Main.java":
+      // nel secondo caso il percorso diventa il titolo del blocco.
+      let lang = info, filename = '';
+      const sep = info.match(/^(\S+)[:\s]+(.+)$/);
+      if (sep) { lang = sep[1]; filename = sep[2].trim(); }
+
+      const ext = LANG_EXT[(lang || '').toLowerCase()] || 'txt';
+      const dlName = filename || `snippet-${Math.floor(i / 2) + 1}.${ext}`;
+
       out.push(
-        <div className="code-card" key={i}>
-          <div className="code-head">
-            <span className="fn">{lang || 'snippet'}</span>
-            <span className="lg">code</span>
-            <span className="act"><button className="act-chip" style={{ border: 'none', padding: 0 }} onClick={() => navigator.clipboard?.writeText(body)}>Copy</button></span>
-          </div>
-          <div className="code-body">
-            {lines.map((ln, k) => (
-              <div className="cl" key={k}><span className="n">{k + 1}</span><span>{ln || ' '}</span></div>
-            ))}
-          </div>
-        </div>
+        <CodeBlock
+          key={i}
+          code={body}
+          lang={lang}
+          filename={filename || undefined}
+          onDownload={() => downloadFile(dlName, body)}
+        />
       );
     } else if (part) {
       out.push(<div className="ai-body" key={i}><Prose text={part} /></div>);
     }
   });
-  if (streaming) out.push(<span className="ai-caret" key="caret" />);
+  if (streaming) {
+    // Nessun testo ancora arrivato: mostra i puntini invece di un cursore
+    // solitario, che sembrerebbe un errore di rendering.
+    if (!text) out.push(<div className="ai-typing" key="typing"><span /><span /><span /></div>);
+    else out.push(<span className="ai-caret" key="caret" />);
+  }
   return <>{out}</>;
 }
 
-function Auth({ onAuth }) {
+/* =====================================================================
+   AUTENTICAZIONE
+   ===================================================================== */
+
+function Auth({ onAuth, onBack }) {
+  const toast = useToast();
   const [mode, setMode] = useState('login');
   const [step, setStep] = useState('form');
   const [email, setEmail] = useState('');
@@ -213,7 +225,6 @@ function Auth({ onAuth }) {
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const start = async () => {
@@ -227,6 +238,7 @@ function Auth({ onAuth }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Errore');
       setStep('code'); setCode('');
+      toast.success('Codice inviato', `Controlla la casella di ${email}.`);
     } catch (e) { setErr(e.message); }
     setLoading(false);
   };
@@ -252,26 +264,18 @@ function Auth({ onAuth }) {
   return (
     <div className="auth-wrap">
       <div className="auth-bg" aria-hidden="true">
-        <VoxelTopographyGrid primaryColor="#34d3b8" wireColor="rgba(52, 211, 184, 0.35)" speed={0.012} tileSize={38} />
+        <VoxelTopographyGrid
+          primaryColor="#34d3b8" wireColor="rgba(52, 211, 184, 0.35)"
+          bgColor="#020617" speed={0.012} tileSize={38}
+        />
       </div>
-      <motion.button className="demo-btn" onClick={() => setShowDemo(true)}
-        initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, type: 'spring', stiffness: 260, damping: 24 }}
-        whileHover={{ y: -2 }} whileTap={{ scale: 0.96 }}>
-        <span className="demo-btn-play">▶</span> Guarda la demo
+
+      <motion.button className="auth-back" onClick={onBack}
+        initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 }}
+        whileHover={{ x: -3 }}>
+        {I.back} Torna al sito
       </motion.button>
-      <AnimatePresence>
-        {showDemo && (
-          <motion.div className="modal-backdrop" onClick={() => setShowDemo(false)}
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-            <motion.div className="video-modal" onClick={(e) => e.stopPropagation()}
-              initial={{ opacity: 0, scale: 0.96, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}>
-              <button className="modal-close" onClick={() => setShowDemo(false)} aria-label="Chiudi">×</button>
-              <video src="/video/kai-code-intro.mp4" controls autoPlay playsInline />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+
       <div className="auth-card">
         <div className="auth-top">
           <span className="wordmark">K AI</span>
@@ -281,15 +285,21 @@ function Auth({ onAuth }) {
         <AnimatePresence mode="wait" initial={false}>
           {step === 'form' ? (
             <motion.div key="form" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}>
-              <p className="auth-lead">Assistente di programmazione per sviluppatori Minecraft. Plugin, mod e codice in ogni linguaggio.</p>
+              <p className="auth-lead">
+                {mode === 'login'
+                  ? 'Bentornato. Accedi per riprendere le tue conversazioni.'
+                  : 'Crea un account: piano Free attivo subito, senza carta di credito.'}
+              </p>
               <label className="field">
                 <span className="lbl">Email</span>
-                <input type="email" placeholder="dev@server.net" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input type="email" autoComplete="email" placeholder="dev@server.net" value={email} onChange={(e) => setEmail(e.target.value)} />
               </label>
               <label className="field">
                 <span className="lbl">Password</span>
                 <div className="field-pw">
-                  <input type={showPassword ? 'text' : 'password'} placeholder="La tua password" value={password}
+                  <input type={showPassword ? 'text' : 'password'}
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    placeholder="La tua password" value={password}
                     onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && start()} />
                   <button type="button" className="field-pw-toggle" onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? 'Nascondi password' : 'Mostra password'} tabIndex={-1}>
@@ -299,7 +309,7 @@ function Auth({ onAuth }) {
               </label>
               {err && <p className="err">{err}</p>}
               <button className="btn" style={{ marginTop: 6 }} onClick={start} disabled={loading || !email || !password}>
-                {loading ? '...' : mode === 'login' ? 'Accedi' : 'Crea account'}
+                {loading ? 'Attendi…' : mode === 'login' ? 'Accedi' : 'Crea account'}
               </button>
               <div><button className="link" onClick={switchMode}>
                 {mode === 'login' ? 'Non hai un account? Registrati' : 'Hai gia un account? Accedi'}
@@ -310,12 +320,12 @@ function Auth({ onAuth }) {
               <p className="auth-lead">Ti abbiamo inviato un codice a 6 cifre a <b>{email}</b>. Inseriscilo per {mode === 'login' ? 'accedere' : 'completare la registrazione'}.</p>
               <label className="field">
                 <span className="lbl">Codice di verifica</span>
-                <input type="text" inputMode="numeric" maxLength={6} placeholder="123456" value={code}
+                <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="123456" value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => e.key === 'Enter' && verify()} />
               </label>
               {err && <p className="err">{err}</p>}
               <button className="btn" style={{ marginTop: 6 }} onClick={verify} disabled={loading || code.length < 6}>
-                {loading ? '...' : 'Verifica'}
+                {loading ? 'Verifico…' : 'Verifica'}
               </button>
               <div style={{ display: 'flex', gap: 14 }}>
                 <button className="link" onClick={() => { setStep('form'); setErr(''); }}>Indietro</button>
@@ -328,6 +338,10 @@ function Auth({ onAuth }) {
     </div>
   );
 }
+
+/* =====================================================================
+   USO / PIANI
+   ===================================================================== */
 
 function UsageBar({ label, used, cap, resetAt, sub }) {
   const pct = cap ? Math.min((used / cap) * 100, 100) : 0;
@@ -352,8 +366,6 @@ function UsageView({ user, onUpgrade }) {
   if (!user || !user.usage) return <div className="usage-view" />;
   const { day, week } = user.usage;
   const planId = user.usage.plan || user.plan;
-  const cur = PLANS.find((p) => p.id === planId) || TEAMS.find((t) => t.id === planId);
-  const isTeam = String(planId).startsWith('team');
 
   return (
     <div className="usage-view">
@@ -448,7 +460,17 @@ function UsageView({ user, onUpgrade }) {
   );
 }
 
-function SettingsView({ user, prefs, onChange, onGoUsage, onUpgrade, onDeleteAccount, onLogout }) {
+/* =====================================================================
+   IMPOSTAZIONI
+   ===================================================================== */
+
+const THEME_CARDS = [
+  { id: 'elegant', name: 'Elegante scuro', desc: 'Raffinato e minimale', sw: ['#12151c', '#5ad6c0', '#e6ad55'] },
+  { id: 'vivid', name: 'Moderno colorato', desc: 'Accenti vivaci, chiaro', sw: ['#f6f4ef', '#0d9488', '#7c5cff'] },
+  { id: 'terminal', name: 'Tech / Terminale', desc: 'Mono, da sviluppatori', sw: ['#0a0f0c', '#3ff0a0', '#1f9d63'] },
+];
+
+function SettingsView({ user, prefs, onChange, onGoUsage, onDeleteAccount, onLogout }) {
   const [section, setSection] = useState('generale');
   if (!user) return <div className="settings-view" />;
   const set = (patch) => onChange({ ...prefs, ...patch });
@@ -491,11 +513,7 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onUpgrade, onDeleteAcc
               <div className="set-sec-h" style={{ marginTop: 10 }}>Tema</div>
               <div className="fhelp" style={{ marginTop: -6 }}>Scegli l'aspetto dell'interfaccia.</div>
               <div className="theme-picker">
-                {[
-                  ['elegant', 'Elegante scuro', 'Raffinato e minimale', ['#12151c', '#5ad6c0', '#e6ad55']],
-                  ['vivid', 'Moderno colorato', 'Accenti vivaci, chiaro', ['#f6f4ef', '#0d9488', '#7c5cff']],
-                  ['terminal', 'Tech / Terminale', 'Mono, da sviluppatori', ['#0a0f0c', '#3ff0a0', '#1f9d63']],
-                ].map(([id, name, desc, sw]) => (
+                {THEME_CARDS.map(({ id, name, desc, sw }) => (
                   <button key={id} className={`theme-card ${(prefs.flavor || 'elegant') === id ? 'on' : ''}`} onClick={() => set({ flavor: id })}>
                     <div className="tc-swatch">{sw.map((c, i) => <span key={i} style={{ background: c }} />)}</div>
                     <div className="tc-meta"><span className="tc-name">{name}</span><span className="tc-desc">{desc}</span></div>
@@ -583,39 +601,111 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onUpgrade, onDeleteAcc
   );
 }
 
+/* =====================================================================
+   AZIONI SOTTO OGNI RISPOSTA
+   ===================================================================== */
+
+function AiActions({ content, onRegenerate, canRegenerate }) {
+  const [copied, setCopied] = useState(false);
+  const files = useMemo(() => extractCodeFiles(content), [content]);
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(content); } catch { /* contesto non sicuro */ }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1700);
+  };
+
+  return (
+    <div className="ai-actions">
+      <button className={copied ? 'act-chip on' : 'act-chip'} onClick={copy}>
+        {copied ? I.check : I.copy} {copied ? 'Copiato' : 'Copia'}
+      </button>
+      {files.length > 0 && (
+        <button className="act-chip zip" onClick={() => downloadZip(files)}>
+          {I.zip} Scarica ZIP · {files.length} file
+        </button>
+      )}
+      {canRegenerate && (
+        <button className="act-chip" onClick={onRegenerate} title="Rigenera la risposta">
+          {I.retry} Rigenera
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* =====================================================================
+   CHAT
+   ===================================================================== */
+
 function Chat({ token, onLogout }) {
+  const toast = useToast();
   const [user, setUser] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [images, setImages] = useState([]);
-  const fileRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState('chat');
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [atBottom, setAtBottom] = useState(true);
+  /** Ultimo messaggio inviato, per la funzione "rigenera" */
+  const lastSentRef = useRef(null);
+
+  const fileRef = useRef(null);
+  const endRef = useRef(null);
+  const streamRef = useRef(null);
+  const taRef = useRef(null);
+
   const [prefs, setPrefsState] = useState(() => {
     const def = { style: 'bilanciato', lang: 'it', instructions: '', name: '', callme: '', work: '', flavor: 'elegant', font: 'system' };
     try { return { ...def, ...JSON.parse(localStorage.getItem('kai_prefs') || '{}') }; }
     catch { return def; }
   });
   const setPrefs = (p) => { setPrefsState(p); localStorage.setItem('kai_prefs', JSON.stringify(p)); };
+
   useEffect(() => {
     const flavor = prefs.flavor || 'elegant';
     const root = document.documentElement;
-    root.classList.remove('theme-elegant', 'theme-vivid', 'theme-terminal', 'dark');
+    root.classList.remove('theme-elegant', 'theme-vivid', 'theme-terminal', 'dark', 'landing-mode');
     root.classList.add('theme-' + flavor);
     if (flavor === 'elegant' || flavor === 'terminal') root.classList.add('dark');
     root.classList.toggle('font-mono', prefs.font === 'mono' || flavor === 'terminal');
   }, [prefs.flavor, prefs.font]);
-  const endRef = useRef(null);
-  const H = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+
+  const H = useMemo(
+    () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }),
+    [token]
+  );
 
   useEffect(() => {
     fetch(`${API}/user/profile`, { headers: H }).then((r) => (r.ok ? r.json() : Promise.reject())).then(setUser).catch(onLogout);
     initSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  // Auto-scroll solo se l'utente è già in fondo: se sta rileggendo un
+  // messaggio precedente, strapparlo giù a ogni chunk dello stream è ostile.
+  useEffect(() => {
+    if (atBottom) endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, atBottom]);
+
+  const onStreamScroll = useCallback(() => {
+    const el = streamRef.current;
+    if (!el) return;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setAtBottom(gap < 120);
+  }, []);
+
+  // Ridimensiona il campo di testo mentre si scrive, fino a un tetto
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 190) + 'px';
+  }, [input]);
+
   const [, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 60000); return () => clearInterval(t); }, []);
 
@@ -629,7 +719,6 @@ function Chat({ token, onLogout }) {
     } catch { return []; }
   };
 
-  // All'avvio: apri la conversazione piu recente con messaggi, altrimenti creane una
   const initSessions = async () => {
     const list = await loadSessions();
     const withMsgs = list.find((s) => !s.empty);
@@ -639,7 +728,7 @@ function Chat({ token, onLogout }) {
   };
 
   const openSession = async (id) => {
-    setSessionId(id); setView('chat');
+    setSessionId(id); setView('chat'); setAtBottom(true);
     try {
       const r = await fetch(`${API}/chat/${id}/messages`, { headers: H });
       const msgs = r.ok ? await r.json() : [];
@@ -648,20 +737,30 @@ function Chat({ token, onLogout }) {
   };
 
   const newChat = async () => {
-    // riusa una chat vuota gia esistente invece di accumularne tante
     const empty = sessions.find((s) => s.empty);
     if (empty) { setSessionId(empty.id); setMessages([]); setView('chat'); return; }
-    const res = await fetch(`${API}/chat/new`, { method: 'POST', headers: H, body: JSON.stringify({ title: 'Nuova conversazione' }) });
-    const data = await res.json();
-    setSessionId(data.sessionId); setMessages([]); setView('chat');
-    loadSessions();
+    try {
+      const res = await fetch(`${API}/chat/new`, { method: 'POST', headers: H, body: JSON.stringify({ title: 'Nuova conversazione' }) });
+      const data = await res.json();
+      setSessionId(data.sessionId); setMessages([]); setView('chat');
+      loadSessions();
+    } catch {
+      toast.error('Non riesco a creare la conversazione', 'Controlla la connessione e riprova.');
+    }
   };
 
   const deleteSession = async (id, e) => {
-    e.stopPropagation();
-    if (!window.confirm('Eliminare questa conversazione?')) return;
+    e?.stopPropagation();
+    const ok = await toast.confirm({
+      title: 'Eliminare questa conversazione?',
+      description: 'I messaggi verranno rimossi definitivamente. L\'operazione non è reversibile.',
+      confirmLabel: 'Elimina',
+      danger: true,
+    });
+    if (!ok) return;
     try { await fetch(`${API}/chat/${id}`, { method: 'DELETE', headers: H }); } catch { /* ignore */ }
     const list = await loadSessions();
+    toast.success('Conversazione eliminata');
     if (id === sessionId) {
       const next = list.find((s) => !s.empty) || list[0];
       if (next) openSession(next.id); else newChat();
@@ -669,48 +768,114 @@ function Chat({ token, onLogout }) {
   };
 
   const onFiles = (e) => {
-    const files = Array.from(e.target.files || []);
+    const files: File[] = Array.from(e.target.files || []);
+    let rejected = 0;
     files.forEach((file) => {
-      if (!file.type.startsWith('image/')) return;
+      if (!file.type.startsWith('image/')) { rejected++; return; }
+      // Oltre ~4MB la conversione in base64 gonfia la richiesta e spesso
+      // il backend la rifiuta: meglio dirlo subito invece di far fallire l'invio.
+      if (file.size > 4 * 1024 * 1024) {
+        toast.error('Immagine troppo grande', `${file.name} supera i 4 MB.`);
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => setImages((prev) => [...prev, { name: file.name, dataUrl: reader.result }].slice(0, 6));
       reader.readAsDataURL(file);
     });
+    if (rejected) toast.info('File ignorati', 'Puoi allegare solo immagini.');
     e.target.value = '';
   };
 
-  const send = async (preset) => {
+  /** Incolla immagini direttamente dagli appunti (screenshot di errori). */
+  const onPaste = (e) => {
+    const items: DataTransferItem[] = Array.from(e.clipboardData?.items || []);
+    const imgs = items.filter((it) => it.type.startsWith('image/'));
+    if (!imgs.length) return;
+    e.preventDefault();
+    imgs.forEach((it) => {
+      const file = it.getAsFile();
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => setImages((prev) => [...prev, { name: file.name || 'incollata.png', dataUrl: reader.result }].slice(0, 6));
+      reader.readAsDataURL(file);
+    });
+    toast.info('Immagine allegata', 'Presa dagli appunti.');
+  };
+
+  const runSend = async (text, imgUrls, { replaceLast = false } = {}) => {
+    setBusy(true);
+    setAtBottom(true);
+    lastSentRef.current = { text, imgUrls };
+
+    setMessages((m) => {
+      // "Rigenera" riusa la stessa domanda: sostituisce solo la risposta
+      const base = replaceLast ? m.slice(0, -1) : [...m, { role: 'user', content: text, images: imgUrls }];
+      return [...base, { role: 'assistant', content: '' }];
+    });
+
+    try {
+      const res = await fetch(`${API}/chat/message`, {
+        method: 'POST', headers: H,
+        body: JSON.stringify({ sessionId, message: text, prefs, images: imgUrls }),
+      });
+
+      if (res.status === 429) {
+        const d = await res.json();
+        setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: 'assistant', content: d.error }; return c; });
+        toast.error('Limite token raggiunto', 'Attendi il reset della finestra o passa a un piano superiore.');
+        setBusy(false);
+        return;
+      }
+      if (!res.ok || !res.body) throw new Error('Risposta non valida dal server');
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const parts = buf.split('\n\n'); buf = parts.pop();
+        for (const p of parts) {
+          const line = p.replace(/^data: /, '').trim();
+          if (!line) continue;
+          try {
+            const evt = JSON.parse(line);
+            if (evt.type === 'text') {
+              setMessages((m) => { const c = [...m]; c[c.length - 1].content += evt.content; return [...c]; });
+            } else if (evt.type === 'error') {
+              setMessages((m) => { const c = [...m]; c[c.length - 1].content += '\n\n' + evt.error; return [...c]; });
+            } else if (evt.type === 'done') {
+              if (evt.usage) setUser((u) => (u ? { ...u, usage: evt.usage } : u));
+            }
+          } catch { /* chunk parziale, arriverà completo al giro dopo */ }
+        }
+      }
+    } catch {
+      setMessages((m) => {
+        const c = [...m];
+        c[c.length - 1] = { role: 'assistant', content: '', failed: true };
+        return c;
+      });
+      toast.error('Connessione interrotta', 'La risposta non è arrivata. Puoi riprovare.');
+    }
+    setBusy(false);
+    loadSessions();
+  };
+
+  const send = async (preset?: string) => {
     const text = (preset ?? input).trim();
     const imgs = preset ? [] : images;
     if ((!text && imgs.length === 0) || !sessionId || busy) return;
     const imgUrls = imgs.map((i) => i.dataUrl);
-    setInput(''); setImages([]); setBusy(true);
-    setMessages((m) => [...m, { role: 'user', content: text, images: imgUrls }, { role: 'assistant', content: '' }]);
-    try {
-      const res = await fetch(`${API}/chat/message`, { method: 'POST', headers: H, body: JSON.stringify({ sessionId, message: text, prefs, images: imgUrls }) });
-      if (res.status === 429) {
-        const d = await res.json();
-        setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: 'assistant', content: d.error }; return c; });
-        setBusy(false); return;
-      }
-      const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
-      while (true) {
-        const { done, value } = await reader.read(); if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const parts = buf.split('\n\n'); buf = parts.pop();
-        for (const p of parts) {
-          const line = p.replace(/^data: /, '').trim(); if (!line) continue;
-          try {
-            const evt = JSON.parse(line);
-            if (evt.type === 'text') setMessages((m) => { const c = [...m]; c[c.length - 1].content += evt.content; return [...c]; });
-            else if (evt.type === 'error') setMessages((m) => { const c = [...m]; c[c.length - 1].content += '\n\n' + evt.error; return [...c]; });
-            else if (evt.type === 'done') { if (evt.usage) setUser((u) => (u ? { ...u, usage: evt.usage } : u)); }
-          } catch { /* partial */ }
-        }
-      }
-    } catch { setMessages((m) => { const c = [...m]; c[c.length - 1].content = 'Connessione fallita.'; return c; }); }
-    setBusy(false);
-    loadSessions();
+    setInput(''); setImages([]);
+    await runSend(text, imgUrls);
+  };
+
+  const regenerate = () => {
+    const last = lastSentRef.current;
+    if (!last || busy) return;
+    runSend(last.text, last.imgUrls, { replaceLast: true });
   };
 
   const upgrade = async (plan) => {
@@ -718,17 +883,63 @@ function Chat({ token, onLogout }) {
       const res = await fetch(`${API}/billing/create-checkout`, { method: 'POST', headers: H, body: JSON.stringify({ plan }) });
       const data = await res.json();
       if (data.url) { window.location.href = data.url; return; }
-      alert('Errore Stripe (' + res.status + '): ' + (data.error || 'sconosciuto'));
+      toast.error('Pagamento non disponibile', data.error || `Il server ha risposto ${res.status}.`);
     } catch (e) {
-      alert('Errore di connessione: ' + e.message);
+      toast.error('Errore di connessione', e.message);
     }
   };
 
   const deleteAccount = async () => {
-    if (!window.confirm('Eliminare l account? Questa azione e irreversibile.')) return;
+    const ok = await toast.confirm({
+      title: 'Eliminare definitivamente l\'account?',
+      description: 'Account, conversazioni e messaggi verranno rimossi. Non è possibile annullare.',
+      confirmLabel: 'Elimina tutto',
+      danger: true,
+    });
+    if (!ok) return;
     try { await fetch(`${API}/account`, { method: 'DELETE', headers: H }); } catch { /* ignore */ }
     onLogout();
   };
+
+  /* ---- palette comandi ---- */
+  const commands = useMemo(() => {
+    const list = [];
+    list.push(
+      { id: 'new', group: 'Azioni', title: 'Nuova conversazione', shortcut: 'Ctrl N', icon: I.plus, keywords: 'crea chat nuova', run: newChat },
+      { id: 'usage', group: 'Azioni', title: 'Uso e piani', icon: I.chart, keywords: 'token limiti abbonamento prezzi', run: () => setView('usage') },
+      { id: 'settings', group: 'Azioni', title: 'Impostazioni', icon: I.gear, keywords: 'preferenze tema profilo', run: () => setView('settings') },
+      { id: 'logout', group: 'Azioni', title: 'Esci', icon: I.logout, keywords: 'logout disconnetti', run: onLogout },
+    );
+    // Cambio tema rapido: è la preferenza che si tocca più spesso
+    [['elegant', 'Elegante scuro'], ['vivid', 'Moderno colorato'], ['terminal', 'Tech / Terminale']].forEach(([id, label]) => {
+      list.push({
+        id: 'theme-' + id, group: 'Tema', title: `Tema: ${label}`, icon: I.gear,
+        keywords: 'aspetto colori ' + id,
+        run: () => { setPrefs({ ...prefs, flavor: id }); toast.success('Tema aggiornato', label); },
+      });
+    });
+    sessions.filter((s) => !s.empty).forEach((s) => {
+      list.push({
+        id: 'conv-' + s.id, group: 'Conversazioni', title: s.title || 'Senza titolo',
+        icon: I.chat, keywords: s.title || '', run: () => openSession(s.id),
+      });
+    });
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, prefs]);
+
+  /* ---- scorciatoie globali ---- */
+  useEffect(() => {
+    const onKey = (e) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen((v) => !v); }
+      else if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); newChat(); }
+      else if (e.key === 'Escape' && (view === 'usage' || view === 'settings')) setView('chat');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, sessions]);
 
   const day = user?.usage?.day;
   const dayPct = day ? Math.min((day.used / day.cap) * 100, 100) : 0;
@@ -738,6 +949,7 @@ function Chat({ token, onLogout }) {
   const planLabel = user ? (PLAN_NAMES[user.plan] || user.plan) : '';
   const convTitle = messages.find((m) => m.role === 'user')?.content?.slice(0, 46) || 'Nuova conversazione';
   const accent = FLAVOR_ACCENT[prefs.flavor] || FLAVOR_ACCENT.elegant;
+  const visibleSessions = sessions.filter((s) => !s.empty);
 
   return (
     <div className="app">
@@ -746,7 +958,8 @@ function Chat({ token, onLogout }) {
           <div className="mono-k">K</div>
           <div className="nav">
             {['chat', 'usage'].map((v) => (
-              <button key={v} className={`ico ${view === v ? 'active' : ''}`} onClick={() => setView(v)}>
+              <button key={v} className={`ico ${view === v ? 'active' : ''}`} onClick={() => setView(v)}
+                title={v === 'chat' ? 'Chat' : 'Uso e piani'}>
                 {view === v && (
                   <motion.span layoutId="rail-indicator" className="ico-indicator" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />
                 )}
@@ -755,8 +968,8 @@ function Chat({ token, onLogout }) {
             ))}
           </div>
           <div className="foot">
-            <button className={`ico ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')}>{I.gear}</button>
-            <div className="avatar">{initials}</div>
+            <button className={`ico ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')} title="Impostazioni">{I.gear}</button>
+            <div className="avatar" title={user?.email}>{initials}</div>
           </div>
         </div>
 
@@ -767,15 +980,17 @@ function Chat({ token, onLogout }) {
           </div>
           <div className="side-actions">
             <button className="new-btn" onClick={newChat}>{I.plus} Nuova conversazione</button>
-            <div className="search">{I.search}<span>Cerca</span><span className="kbd">Ctrl K</span></div>
+            <button className="search" onClick={() => setPaletteOpen(true)}>
+              {I.search}<span>Cerca</span><span className="kbd">Ctrl K</span>
+            </button>
           </div>
           <div className="side-sec">Conversazioni</div>
           <div className="conv-list">
-            {sessions.filter((s) => !s.empty).length === 0 && (
+            {visibleSessions.length === 0 && (
               <div className="conv-empty">Nessuna conversazione salvata.</div>
             )}
             <AnimatePresence initial={false}>
-              {sessions.filter((s) => !s.empty).map((s) => (
+              {visibleSessions.map((s) => (
                 <motion.div key={s.id} layout
                   initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
@@ -803,16 +1018,19 @@ function Chat({ token, onLogout }) {
             <span className="model"><span className="dot" /> K AI {I.chevron}</span>
           </div>
 
-          <div className="stream">
+          <div className="stream" ref={streamRef} onScroll={onStreamScroll}>
             {messages.length === 0 ? (
               <div className="welcome-stage">
                 <div className="welcome-bg" aria-hidden="true">
-                  <VoxelTopographyGrid primaryColor={accent.primary} wireColor={accent.wire} speed={0.01} tileSize={42} maxHeight={50} />
+                  <VoxelTopographyGrid
+                    primaryColor={accent.primary} wireColor={accent.wire} bgColor={accent.bg}
+                    speed={0.01} tileSize={42} maxHeight={50} interactive={false}
+                  />
                 </div>
                 <motion.div className="welcome" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 26 }}>
                   <div className="k">K</div>
                   <h2>Cosa costruiamo oggi?</h2>
-                  <p>Plugin, mod, script o debugging in qualsiasi linguaggio. Il codice e monocromatico, la sintassi si legge dal peso.</p>
+                  <p>Plugin, mod, script o debugging in qualsiasi linguaggio. Descrivi il problema come lo racconteresti a un collega.</p>
                   <motion.div className="chips" initial="hidden" animate="show"
                     variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.15 } } }}>
                     {EXAMPLES.map((ex) => (
@@ -841,17 +1059,20 @@ function Chat({ token, onLogout }) {
                 ) : (
                   <motion.div className="turn-ai" key={i} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 320, damping: 30 }}>
                     <div className="ai-head"><span className="k">K</span><span className="meta">K AI</span></div>
-                    <Content text={m.content} streaming={busy && i === messages.length - 1} />
-                    {m.content && (
-                      <div className="ai-actions">
-                        <button className="act-chip" onClick={() => navigator.clipboard?.writeText(m.content)}>Copia</button>
-                        {(() => {
-                          const files = extractCodeFiles(m.content);
-                          return files.length > 0 ? (
-                            <button className="act-chip zip" onClick={() => downloadZip(files)}>{I.zip} Scarica ZIP · {files.length} file</button>
-                          ) : null;
-                        })()}
+                    {m.failed ? (
+                      <div className="chat-error">
+                        <span><b>Risposta non ricevuta.</b> La connessione si è interrotta durante la generazione.</span>
+                        <button onClick={regenerate}>Riprova</button>
                       </div>
+                    ) : (
+                      <Content text={m.content} streaming={busy && i === messages.length - 1} />
+                    )}
+                    {m.content && !busy && (
+                      <AiActions
+                        content={m.content}
+                        onRegenerate={regenerate}
+                        canRegenerate={i === messages.length - 1 && !!lastSentRef.current}
+                      />
                     )}
                   </motion.div>
                 )
@@ -859,6 +1080,18 @@ function Chat({ token, onLogout }) {
               <div ref={endRef} />
             </div>
             )}
+
+            <AnimatePresence>
+              {!atBottom && messages.length > 0 && (
+                <motion.button
+                  className="scroll-bottom"
+                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                  onClick={() => { setAtBottom(true); endRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
+                >
+                  {I.down} Torna in fondo
+                </motion.button>
+              )}
+            </AnimatePresence>
           </div>
 
           <div className="composer">
@@ -874,25 +1107,40 @@ function Chat({ token, onLogout }) {
                     ))}
                   </div>
                 )}
-                <textarea placeholder="Scrivi a K AI..." value={input}
+                <textarea
+                  ref={taRef}
+                  rows={1}
+                  placeholder="Scrivi a K AI…  (incolla pure uno screenshot)"
+                  value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
+                  onPaste={onPaste}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+                />
                 <div className="box-row">
                   <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onFiles} />
+                  {/* I chip "Web" e "Tools" erano decorativi: sembravano
+                      comandi ma non facevano nulla. Al loro posto un
+                      contatore reale degli allegati. */}
                   <button className="tool" onClick={() => fileRef.current?.click()} title="Allega immagini">{I.image}</button>
-                  <span className="tool-chip">Web</span>
-                  <span className="tool-chip">Tools</span>
-                  <button className="send" onClick={() => send()} disabled={busy || (!input.trim() && images.length === 0)}>Invia {I.send}</button>
+                  {images.length > 0 && (
+                    <span className="tool-chip">{images.length} {images.length === 1 ? 'immagine' : 'immagini'}</span>
+                  )}
+                  <button className="send" onClick={() => send()} disabled={busy || (!input.trim() && images.length === 0)}>
+                    {busy ? 'Sto scrivendo…' : <>Invia {I.send}</>}
+                  </button>
                 </div>
               </div>
               <div className="composer-meta">
-                <span>Invio per inviare - Shift+Invio a capo</span>
+                <span><span className="kbd-hint">Invio</span> invia · <span className="kbd-hint">Shift+Invio</span> a capo · <span className="kbd-hint">Ctrl K</span> cerca</span>
                 <span>K AI · {fmtTokens(dayLeft)} token nella finestra</span>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
+
       <AnimatePresence>
         {(view === 'usage' || view === 'settings') && (
           <motion.div className="modal-backdrop" onClick={() => setView('chat')}
@@ -903,7 +1151,7 @@ function Chat({ token, onLogout }) {
               <button className="modal-close" onClick={() => setView('chat')} aria-label="Chiudi">×</button>
               {view === 'usage'
                 ? <UsageView user={user} onUpgrade={upgrade} />
-                : <SettingsView user={user} prefs={prefs} onChange={setPrefs} onGoUsage={() => setView('usage')} onUpgrade={upgrade} onDeleteAccount={deleteAccount} onLogout={onLogout} />}
+                : <SettingsView user={user} prefs={prefs} onChange={setPrefs} onGoUsage={() => setView('usage')} onDeleteAccount={deleteAccount} onLogout={onLogout} />}
             </motion.div>
           </motion.div>
         )}
@@ -912,12 +1160,43 @@ function Chat({ token, onLogout }) {
   );
 }
 
+/* =====================================================================
+   RADICE
+   ===================================================================== */
+
 export default function App() {
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const logout = () => { localStorage.removeItem('token'); setToken(null); };
+  const [token, setToken] = useState(() => localStorage.getItem('token'));
+  // Chi ha già un token va dritto in chat; gli altri vedono la vetrina.
+  const [stage, setStage] = useState(() => (localStorage.getItem('token') ? 'app' : 'landing'));
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setStage('landing');
+  };
+
+  const onAuth = (t) => { setToken(t); setStage('app'); };
+
+  // Il tema della landing è fisso; tornando all'app va ripristinato quello scelto.
+  useEffect(() => {
+    if (stage !== 'landing') return;
+    const root = document.documentElement;
+    const prev = root.className;
+    root.className = 'landing-mode dark theme-elegant';
+    return () => { root.className = prev; };
+  }, [stage]);
+
   return (
     <MotionConfig reducedMotion="user">
-      {token ? <Chat token={token} onLogout={logout} /> : <Auth onAuth={setToken} />}
+      {token && stage === 'app' ? (
+        <Chat token={token} onLogout={logout} />
+      ) : stage === 'auth' ? (
+        <Auth onAuth={onAuth} onBack={() => setStage('landing')} />
+      ) : (
+        <Suspense fallback={<div className="lp-loading" aria-label="Caricamento" />}>
+          <Landing onStart={() => setStage('auth')} />
+        </Suspense>
+      )}
     </MotionConfig>
   );
 }
