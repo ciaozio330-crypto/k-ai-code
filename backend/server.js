@@ -482,10 +482,23 @@ app.post('/chat/message', auth, async (req, res) => {
     .get(sessionId, req.user.id);
   if (!session) return res.status(404).json({ error: 'Session not found' });
 
-  // Save user message and rebuild conversation history for context
-  const savedText = message || (images.length ? '[immagini allegate]' : '');
-  db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?, ?, ?, ?)')
-    .run(randomUUID(), sessionId, 'user', savedText);
+  // "Rigenera" rimanda la stessa domanda per ottenere una risposta diversa.
+  // Senza questo ramo il messaggio dell'utente verrebbe salvato una seconda
+  // volta e la vecchia risposta resterebbe in archivio: ricaricando la
+  // conversazione si vedrebbe la domanda doppia con due risposte.
+  const isRegenerate = !!(req.body && req.body.regenerate);
+
+  if (isRegenerate) {
+    const lastAssistant = db.prepare(
+      "SELECT id FROM messages WHERE session_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1"
+    ).get(sessionId);
+    if (lastAssistant) db.prepare('DELETE FROM messages WHERE id = ?').run(lastAssistant.id);
+  } else {
+    // Save user message and rebuild conversation history for context
+    const savedText = message || (images.length ? '[immagini allegate]' : '');
+    db.prepare('INSERT INTO messages (id, session_id, role, content) VALUES (?, ?, ?, ?)')
+      .run(randomUUID(), sessionId, 'user', savedText);
+  }
 
   const history = db.prepare('SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at ASC')
     .all(sessionId)

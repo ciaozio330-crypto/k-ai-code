@@ -820,7 +820,9 @@ function Chat({ token, onLogout }) {
     try {
       const res = await fetch(`${API}/chat/message`, {
         method: 'POST', headers: H,
-        body: JSON.stringify({ sessionId, message: text, prefs, images: imgUrls }),
+        // `regenerate` dice al backend di scartare la risposta precedente
+        // invece di salvare di nuovo la stessa domanda.
+        body: JSON.stringify({ sessionId, message: text, prefs, images: imgUrls, regenerate: replaceLast }),
       });
 
       if (res.status === 429) {
