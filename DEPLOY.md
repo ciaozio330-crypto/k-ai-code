@@ -1,10 +1,16 @@
 # K AI Code — come metterlo online
 
 Repo diviso in due cartelle:
-- `backend/`  → va su Railway
-- `frontend/` → va su Vercel
+- `backend/`  → **Render** (attivo su `https://k-ai-code.onrender.com`)
+- `frontend/` → **Vercel** (attivo su `https://k-ai-code-ujbf.vercel.app`)
 
-Questa separazione risolve gli errori di prima (root directory / package.json).
+Entrambi fanno redeploy da soli a ogni push su `main`: non serve nessun
+comando manuale.
+
+> Le istruzioni qui sotto parlano di Railway perché è lì che era stato
+> messo il backend all'inizio. Il servizio ora gira su Render: la procedura
+> è la stessa (root directory `backend`, stesse variabili d'ambiente),
+> cambia solo il pannello.
 
 ---
 
