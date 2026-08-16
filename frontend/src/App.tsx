@@ -125,6 +125,7 @@ const I = {
   eye: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M1.5 12S5 5 12 5s10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg>,
   eyeOff: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.6 10.6 0 0112 5c7 0 10.5 7 10.5 7a15.6 15.6 0 01-3.4 4.4M6.7 6.7C3.4 8.8 1.5 12 1.5 12s3.5 7 10.5 7c1.5 0 2.8-.3 4-.8"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/></svg>,
   back: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>,
+  menu: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>,
 };
 
 function inline(text, kb) {
@@ -650,6 +651,8 @@ function Chat({ token, onLogout }) {
   const [view, setView] = useState('chat');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [atBottom, setAtBottom] = useState(true);
+  /** Cassetto della sidebar: usato solo sotto i 1000px (vedi index.css). */
+  const [sideOpen, setSideOpen] = useState(false);
   /** Ultimo messaggio inviato, per la funzione "rigenera" */
   const lastSentRef = useRef(null);
 
@@ -728,7 +731,7 @@ function Chat({ token, onLogout }) {
   };
 
   const openSession = async (id) => {
-    setSessionId(id); setView('chat'); setAtBottom(true);
+    setSessionId(id); setView('chat'); setAtBottom(true); setSideOpen(false);
     try {
       const r = await fetch(`${API}/chat/${id}/messages`, { headers: H });
       const msgs = r.ok ? await r.json() : [];
@@ -737,6 +740,7 @@ function Chat({ token, onLogout }) {
   };
 
   const newChat = async () => {
+    setSideOpen(false);
     const empty = sessions.find((s) => s.empty);
     if (empty) { setSessionId(empty.id); setMessages([]); setView('chat'); return; }
     try {
@@ -934,7 +938,10 @@ function Chat({ token, onLogout }) {
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen((v) => !v); }
       else if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); newChat(); }
-      else if (e.key === 'Escape' && (view === 'usage' || view === 'settings')) setView('chat');
+      else if (e.key === 'Escape') {
+        if (view === 'usage' || view === 'settings') setView('chat');
+        else setSideOpen(false);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -973,7 +980,16 @@ function Chat({ token, onLogout }) {
           </div>
         </div>
 
-        <div className="side">
+        <AnimatePresence>
+          {sideOpen && (
+            <motion.div className="side-scrim" onClick={() => setSideOpen(false)}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }} aria-hidden="true" />
+          )}
+        </AnimatePresence>
+
+        <div className={sideOpen ? 'side open' : 'side'}>
+          <button className="side-close" onClick={() => setSideOpen(false)} aria-label="Chiudi il menu">×</button>
           <div className="side-head">
             <span className="wordmark">K AI</span>
             <span className="tag">{planLabel}</span>
@@ -1014,6 +1030,9 @@ function Chat({ token, onLogout }) {
 
         <div className="main">
           <div className="top">
+            <button className="menu-btn" onClick={() => setSideOpen(true)} aria-label="Apri le conversazioni">
+              {I.menu}
+            </button>
             <span className="conv">{convTitle}</span>
             <span className="model"><span className="dot" /> K AI {I.chevron}</span>
           </div>
