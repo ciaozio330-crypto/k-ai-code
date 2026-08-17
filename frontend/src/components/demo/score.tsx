@@ -17,10 +17,8 @@ import { useComposition } from './engine';
  * reale e non può essere "renderizzato a T". Per non rompere l'export
  * questo modulo:
  *   - non tocca MAI l'albero visibile (il componente rende null);
- *   - suona solo durante una riproduzione autentica, riconosciuta da tre
- *     condizioni insieme: playing === true, avanzamento in avanti e
- *     piccolo (un seek salta), e tempo di parete plausibile (una raffica
- *     di seek d'esportazione arriva molto più veloce del tempo reale);
+ *   - suona solo durante una riproduzione autentica: playing === true e
+ *     avanzamento in avanti e piccolo (un seek salta oltre la soglia);
  *   - al primo segnale anomalo tace e si risincronizza.
  * Il risultato è che in esportazione questo file è silenzioso e inerte.
  *
@@ -665,7 +663,6 @@ export function ScoreTrack(props) {
 
   const engRef = React.useRef(null);
   const lastRef = React.useRef(null);       // ultimo T osservato
-  const wallRef = React.useRef(0);          // performance.now() dell'ultima osservazione
   const rndRef = React.useRef(seeded(4242));
   const armedRef = React.useRef(false);     // AudioContext sbloccato da un gesto?
 
@@ -725,21 +722,24 @@ export function ScoreTrack(props) {
   React.useEffect(() => {
     const eng = engRef.current;
     const prev = lastRef.current;
-    const prevWall = wallRef.current;
-    const nowWall = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-
     lastRef.current = T;
-    wallRef.current = nowWall;
 
     if (!eng || !enabled) return;
     if (prev == null) return;
 
     const dt = T - prev;
-    const wallDt = nowWall - prevWall;
 
-    // Le tre condizioni del contratto in cima al file. Basta che una non
-    // regga — pausa, seek, raffica d'esportazione — e l'audio tace.
-    const realPlayback = playing && dt > 0 && dt < 0.4 && wallDt >= 8;
+    // Riproduzione autentica: sta suonando e il tempo è avanzato di un passo
+    // piccolo. Un salto (seek, cambio capitolo) supera la soglia e non suona.
+    //
+    // Qui NON si guarda il tempo di parete. Sembrava una difesa sensata
+    // contro le raffiche di seek, ma React emette più render per ogni tick
+    // dell'orologio — il figlio si aggiorna, poi il genitore che riceve
+    // onTime — e quello che porta l'avanzamento arriva anche 2 ms dopo il
+    // precedente. La condizione scartava proprio i fotogrammi buoni: musica
+    // ed effetti restavano muti per intero. A distinguere una riproduzione
+    // da uno scorrimento bastano `playing` e l'ampiezza del passo.
+    const realPlayback = playing && dt > 0 && dt < 0.4;
     if (!realPlayback) {
       eng.hush();
       return;
