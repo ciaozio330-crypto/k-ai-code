@@ -1,0 +1,173 @@
+/* I due font della coreografia. Stanno qui e non in index.css perché questo
+   foglio viaggia col chunk della demo: chi non apre il video non li scarica. */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:wght@500;600;700&display=swap');
+
+/* ============================================================
+   K AI CODE — DEMO DAL VIVO
+   L'animazione dell'introduzione, che prima era un mp4 da 6 MB e
+   ora gira come componente. Palette e misure sue: la coreografia è
+   stata montata su un fotogramma fisso e non va resa responsive,
+   si scala l'intero palco.
+   ============================================================ */
+
+.dm {
+  display: flex; flex-direction: column;
+  background: #05070a;
+  width: 100%;
+}
+
+/* ---- palco ---- */
+.dm-viewport {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #e7e5e0;
+}
+
+.dm-stage {
+  position: absolute; inset: 0;
+  overflow: hidden;
+}
+
+/* Il pezzo è disegnato a 1920x1080 e viene scalato dal motore.
+   L'origine al centro tiene il fotogramma centrato a ogni scala. */
+.dm-frame {
+  position: absolute; left: 50%; top: 50%;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+/* ---- didascalie ---- */
+.dm-caption {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+/* ---- copertina ---- */
+.dm-cover {
+  position: absolute; inset: 0; z-index: 3;
+  display: flex; flex-direction: column;
+  padding: clamp(16px, 2.8vw, 32px);
+  background:
+    radial-gradient(120% 100% at 50% 118%, rgba(52, 211, 184, .16), transparent 62%),
+    linear-gradient(158deg, #0b1219 0%, #070c12 54%, #05080c 100%);
+}
+.dm-cover-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.dm-brand {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--f-serif); font-size: clamp(13px, 1.5vw, 17px); font-weight: 700;
+  letter-spacing: -0.015em; color: #f1f4f9;
+}
+.dm-brand em { font-style: normal; color: #34d3b8; }
+.dm-brand-mark {
+  width: 27px; height: 27px; border-radius: 8px; display: grid; place-items: center;
+  background: linear-gradient(155deg, #5ff0d6, #22b89f); color: #04231d;
+  font-size: 15px; line-height: 1;
+}
+.dm-cover-tag {
+  font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+  color: #7e8798; border: 1px solid #232c38; border-radius: 999px; padding: 5px 12px;
+  white-space: nowrap;
+}
+
+.dm-cover-mid {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 13px; text-align: center;
+}
+.dm-play {
+  position: relative; width: clamp(58px, 6.5vw, 78px); aspect-ratio: 1;
+  border-radius: 999px; display: grid; place-items: center; padding-left: 4px;
+  margin-bottom: 4px;
+  background: linear-gradient(155deg, #5ff0d6, #22b89f); color: #04231d;
+  box-shadow: 0 16px 46px -14px rgba(52, 211, 184, .85);
+}
+.dm-play-ring {
+  position: absolute; inset: -9px; border-radius: 999px;
+  border: 1px solid rgba(52, 211, 184, .42);
+  animation: dm-ring 2.6s ease-out infinite;
+}
+@keyframes dm-ring {
+  0% { transform: scale(1); opacity: .75; }
+  70%, 100% { transform: scale(1.32); opacity: 0; }
+}
+.dm-title {
+  font-size: clamp(18px, 2.4vw, 28px); font-weight: 700; letter-spacing: -0.028em;
+  color: #f1f4f9; margin: 0; max-width: 22ch; text-wrap: balance;
+}
+.dm-sub {
+  font-size: clamp(12px, 1.35vw, 14.5px); line-height: 1.55; color: #98a1b0;
+  margin: 0; max-width: 44ch;
+}
+
+.dm-cover-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.dm-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 11.5px; color: #b8c0cd;
+  border: 1px solid #232c38; background: rgba(255,255,255,.035);
+  border-radius: 999px; padding: 6px 13px;
+  transition: border-color .18s, background .18s, color .18s;
+}
+.dm-chip:hover { border-color: #34d3b8; color: #f1f4f9; background: rgba(52,211,184,.1); }
+.dm-chip b {
+  font-family: var(--f-mono); font-size: 10.5px; font-weight: 500; color: #34d3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- barra dei comandi ---- */
+.dm-bar {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 14px;
+  background: #080c11; border-top: 1px solid #161d26;
+}
+.dm-ctl {
+  flex: 0 0 auto; width: 32px; height: 32px; border-radius: 8px;
+  display: grid; place-items: center; color: #b8c0cd;
+  transition: background .16s, color .16s;
+}
+.dm-ctl:hover { background: rgba(255,255,255,.07); color: #f1f4f9; }
+.dm-ctl.off { color: #59616f; }
+
+.dm-time {
+  font-family: var(--f-mono); font-size: 11.5px; color: #b8c0cd;
+  font-variant-numeric: tabular-nums; flex: 0 0 auto;
+}
+.dm-time.dim { color: #59616f; }
+
+.dm-track {
+  flex: 1; min-width: 0; height: 20px; position: relative; cursor: pointer;
+  display: flex; align-items: center;
+}
+/* la traccia vera è sottile, ma l'area cliccabile resta comoda */
+.dm-track::before {
+  content: ''; position: absolute; left: 0; right: 0; height: 4px;
+  border-radius: 99px; background: #1b2330;
+}
+.dm-track-fill {
+  position: absolute; left: 0; height: 4px; border-radius: 99px;
+  background: linear-gradient(90deg, #22b89f, #5ff0d6);
+  pointer-events: none;
+}
+.dm-track:hover .dm-track-fill { filter: brightness(1.12); }
+.dm-mark {
+  position: absolute; width: 2px; height: 9px; border-radius: 1px;
+  background: rgba(255,255,255,.22); transform: translateX(-1px);
+  pointer-events: none;
+}
+
+.dm-scene {
+  flex: 0 0 auto; font-size: 11px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; color: #34d3b8;
+  min-width: 74px; text-align: right;
+}
+
+@media (max-width: 640px) {
+  .dm-cover-chips { display: none; }
+  .dm-scene { display: none; }
+  .dm-bar { gap: 8px; padding: 9px 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dm-play-ring { animation: none; }
+}

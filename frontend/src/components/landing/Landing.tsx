@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { VoxelTopographyGrid } from '@/components/ui/voxel-topography-grid';
 import { CodeBlock } from '@/components/ui/code-block';
-import { VideoPlayer } from '@/components/ui/video-player';
 import { Icon } from '@/components/ui/icons';
 import type { IconName } from '@/components/ui/icons';
 import {
@@ -977,13 +976,12 @@ function Footer({ onStart }: { onStart: () => void }) {
    MODALE VIDEO
    ===================================================================== */
 
-/** Segmenti del video introduttivo, per la navigazione a capitoli. */
-const VIDEO_CHAPTERS = [
-  { at: 0, label: 'Il prodotto' },
-  { at: 12, label: 'Demo dal vivo' },
-  { at: 26, label: 'I piani' },
-  { at: 38, label: 'Come iniziare' },
-];
+/**
+ * La demo non è più un mp4 ma l'animazione vera, che gira dal vivo con la
+ * sua colonna sonora. Caricata a richiesta: chi non la apre non ne scarica
+ * né il codice né i font.
+ */
+const DemoPlayer = lazy(() => import('@/components/demo/DemoPlayer'));
 
 function VideoModal({ onClose }: { onClose: () => void }) {
   useLockBodyScroll(true);
@@ -1006,13 +1004,9 @@ function VideoModal({ onClose }: { onClose: () => void }) {
         transition={{ type: 'spring', stiffness: 380, damping: 32 }}
       >
         <button className="modal-close" onClick={onClose} aria-label="Chiudi">×</button>
-        <VideoPlayer
-          src="/video/kai-code-intro.mp4"
-          title="K AI Code in azione"
-          chapters={VIDEO_CHAPTERS}
-          durationHint={46.7}
-          onClose={onClose}
-        />
+        <Suspense fallback={<div className="dm-loading" aria-label="Caricamento della demo" />}>
+          <DemoPlayer onClose={onClose} />
+        </Suspense>
       </motion.div>
     </motion.div>
   );

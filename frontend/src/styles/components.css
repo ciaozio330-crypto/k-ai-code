@@ -621,7 +621,9 @@ html.theme-terminal {
 /* La regola originale di .video-modal azzerava line-height per eliminare lo
    spazio sotto un <video> inline. Ora il modale contiene anche testo
    (capitoli, scorciatoie), quindi va ripristinato. */
-.video-modal { line-height: 1.5; background: #05070a; }
+/* Più largo del vecchio modale video: la demo è un fotogramma 1920x1080 e
+   a 960px il codice sullo schermo diventava troppo piccolo da leggere. */
+.video-modal { line-height: 1.5; background: #05070a; width: min(1240px, 94vw); }
 .video-modal .modal-close { background: rgba(8, 10, 14, .72); color: #fff; }
 .video-modal .modal-close:hover { background: rgba(8, 10, 14, .92); }
 
@@ -805,4 +807,17 @@ html.theme-terminal {
 @media (prefers-reduced-motion: reduce) {
   .ai-typing span, .demo-thinking span, .hero-badge-dot, .demo-live-dot { animation: none; }
   .lp-loading::after { animation-duration: 2s; }
+}
+
+/* Attesa del chunk della demo: stesso fondo del palco, così non lampeggia
+   di bianco tra l'apertura del modale e il primo fotogramma. */
+.dm-loading {
+  aspect-ratio: 16 / 9; width: 100%;
+  background: #05070a;
+  display: grid; place-items: center;
+}
+.dm-loading::after {
+  content: ''; width: 30px; height: 30px; border-radius: 99px;
+  border: 2px solid rgba(52, 211, 184, .22); border-top-color: #34d3b8;
+  animation: lp-spin .75s linear infinite;
 }
