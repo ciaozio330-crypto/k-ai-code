@@ -319,8 +319,165 @@ html.theme-terminal {
 }
 
 /* ============================================================
+   MARKDOWN NELLE RISPOSTE
+   Tabelle, citazioni, elenchi numerati e link: prima non venivano
+   riconosciuti e finivano a schermo come testo grezzo.
+   ============================================================ */
+
+/* ---- elenchi ----
+   `list-style` esplicito: il reset di Tailwind azzera i marcatori su ul/ol,
+   quindi senza questo un elenco numerato perde proprio i numeri e le voci
+   restano indistinguibili da normali righe di testo. */
+.ai-body .md-ul { list-style: disc outside; }
+.ai-body .md-ol { list-style: decimal outside; }
+.ai-body .md-ul .md-ul { list-style: circle outside; }
+.ai-body .md-ol .md-ol { list-style: lower-alpha outside; }
+
+.ai-body .md-ol { margin: 0 0 13px; padding-left: 24px; }
+.ai-body .md-ol:last-child { margin-bottom: 0; }
+.ai-body .md-ol li { margin: 5px 0; padding-left: 3px; }
+.ai-body .md-ol li::marker { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* un sotto-elenco non deve staccarsi dalla voce che lo introduce */
+.ai-body .md-ul .md-ul, .ai-body .md-ul .md-ol,
+.ai-body .md-ol .md-ul, .ai-body .md-ol .md-ol { margin: 5px 0 2px; }
+
+/* ---- link ---- */
+.ai-body .md-link {
+  color: var(--accent); text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 2px; transition: text-decoration-color .16s, color .16s;
+  /* un URL lungo non deve allargare la colonna della conversazione */
+  overflow-wrap: anywhere;
+}
+.ai-body .md-link:hover { color: var(--accent-2); text-decoration-color: currentColor; }
+
+/* ---- citazioni ---- */
+.ai-body .md-quote {
+  margin: 0 0 13px; padding: 2px 0 2px 15px;
+  border-left: 3px solid var(--accent);
+  color: var(--text-3);
+}
+.ai-body .md-quote:last-child { margin-bottom: 0; }
+.ai-body .md-quote .md-p:last-child { margin-bottom: 0; }
+
+/* ---- linea orizzontale ---- */
+.ai-body .md-hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+/* ---- barrato ---- */
+.ai-body del { color: var(--text-4); text-decoration-thickness: 1px; }
+
+/* ---- tabelle ---- */
+.ai-body .md-table-wrap {
+  margin: 0 0 13px; overflow-x: auto;
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.ai-body .md-table-wrap:last-child { margin-bottom: 0; }
+.ai-body .md-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13.5px; line-height: 1.55;
+}
+.ai-body .md-table th,
+.ai-body .md-table td {
+  padding: 9px 14px; text-align: left;
+  border-bottom: 1px solid var(--border-2);
+  vertical-align: top;
+}
+.ai-body .md-table th {
+  background: var(--surface-3); color: var(--text);
+  font-weight: 600; white-space: nowrap;
+  position: sticky; top: 0;
+}
+.ai-body .md-table td { color: var(--text-2); }
+.ai-body .md-table tr:last-child td { border-bottom: none; }
+.ai-body .md-table tbody tr:hover { background: var(--active); }
+.ai-body .md-table-wrap::-webkit-scrollbar { height: 8px; }
+.ai-body .md-table-wrap::-webkit-scrollbar-thumb {
+  background: var(--border-strong); border-radius: 99px;
+  border: 2px solid transparent; background-clip: padding-box;
+}
+
+.ai-body .md-h4 { font-size: 13.5px; }
+
+/* ============================================================
    MIGLIORIE CHAT
    ============================================================ */
+
+/* ---- interruzione della generazione ---- */
+.send.stop {
+  background: var(--surface-3); color: var(--text-2);
+  border: 1px solid var(--border-strong); box-shadow: none;
+}
+.send.stop:hover { border-color: var(--danger); color: var(--danger); transform: translateY(-1px); }
+.send.stop svg { flex: 0 0 auto; }
+.turn-stopped {
+  font-size: 12px; color: var(--text-4); font-style: italic;
+  padding-top: 2px;
+}
+
+/* ---- rinomina in linea ---- */
+.ci-rename {
+  flex: 1; min-width: 0; width: 100%;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--accent); border-radius: var(--r-xs);
+  padding: 5px 8px; font-size: 12.5px;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+.ci-rename:focus { outline: none; }
+.ci-act {
+  flex: 0 0 auto; width: 20px; height: 20px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-4); opacity: 0;
+  transition: opacity .14s, background .14s, color .14s;
+}
+.conv-item:hover .ci-act, .conv-item.active .ci-act { opacity: 1; }
+.ci-act:hover { background: var(--border); color: var(--text); }
+.ci-del { font-size: 15px; line-height: 1; }
+.ci-del:hover { background: var(--border); color: var(--danger); }
+/* su touch non esiste l'hover: i comandi restano sempre visibili */
+@media (hover: none) {
+  .conv-item .ci-act { opacity: 1; }
+}
+
+/* ============================================================
+   CONFINE DI ERRORE
+   ============================================================ */
+.err-boundary {
+  position: fixed; inset: 0; z-index: 400;
+  display: grid; place-items: center; padding: 24px;
+  background: #0a0c0f; color: #eef1f6;
+  font-family: var(--f-body);
+}
+.err-box {
+  max-width: 470px; width: 100%; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.err-mark {
+  width: 52px; height: 52px; border-radius: 999px; display: grid; place-items: center;
+  background: rgba(255, 107, 94, 0.12); color: #ff6b5e;
+}
+.err-box h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+.err-box p { font-size: 14px; line-height: 1.62; color: #8a91a0; margin: 0; }
+.err-detail {
+  width: 100%; margin: 4px 0 0; padding: 11px 13px; text-align: left;
+  font-family: var(--f-mono); font-size: 11.5px; line-height: 1.5; color: #c5cbd6;
+  background: #101317; border: 1px solid #23272f; border-radius: 9px;
+  max-height: 130px; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.err-actions { display: flex; gap: 9px; flex-wrap: wrap; justify-content: center; margin-top: 6px; }
+.err-primary {
+  padding: 11px 22px; border-radius: 9px; font-size: 13.5px; font-weight: 650;
+  background: linear-gradient(158deg, #5ff0d6, #22b89f); color: #04231d;
+  transition: filter .18s, transform .15s;
+}
+.err-primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.err-secondary {
+  padding: 11px 20px; border-radius: 9px; font-size: 13.5px; font-weight: 600;
+  border: 1px solid #2e333d; color: #c5cbd6;
+  transition: border-color .18s, background .18s;
+}
+.err-secondary:hover { border-color: #4a505d; background: #141820; }
 
 /* pulsante "torna in fondo" quando si scrolla indietro nella conversazione */
 .scroll-bottom {

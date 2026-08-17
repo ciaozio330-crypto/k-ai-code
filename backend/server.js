@@ -164,6 +164,10 @@ ensureColumn('users', 'tokens_4h_used', 'INTEGER DEFAULT 0');
 ensureColumn('users', 'window_4h_start', 'INTEGER DEFAULT 0');
 ensureColumn('users', 'tokens_week_used', 'INTEGER DEFAULT 0');
 ensureColumn('users', 'week_start', 'INTEGER DEFAULT 0');
+// Titolo scelto dall'utente. Serve una colonna a parte perché l'elenco
+// mostra normalmente il primo messaggio: senza un flag esplicito, un titolo
+// personalizzato verrebbe subito ricoperto da quello derivato.
+ensureColumn('chat_sessions', 'custom_title', 'TEXT');
 
 // resetta le finestre scadute e restituisce i contatori aggiornati
 function refreshWindows(user) {
@@ -434,7 +438,7 @@ app.post('/chat/new', auth, (req, res) => {
 // Lista conversazioni dell'utente (piu recenti prima, con anteprima titolo)
 app.get('/chat/sessions', auth, (req, res) => {
   const rows = db.prepare(`
-    SELECT s.id, s.title, s.created_at,
+    SELECT s.id, s.title, s.custom_title, s.created_at,
       (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.created_at ASC LIMIT 1) AS first_msg,
       (SELECT MAX(created_at) FROM messages m WHERE m.session_id = s.id) AS last_at,
       (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS n
@@ -444,9 +448,24 @@ app.get('/chat/sessions', auth, (req, res) => {
   `).all(req.user.id);
   res.json(rows.map((r) => ({
     id: r.id,
-    title: (r.first_msg && r.first_msg.slice(0, 60)) || r.title || 'Nuova conversazione',
+    // Un titolo scelto a mano ha la precedenza su quello dedotto dal primo messaggio
+    title: r.custom_title || (r.first_msg && r.first_msg.slice(0, 60)) || r.title || 'Nuova conversazione',
+    renamed: !!r.custom_title,
     empty: r.n === 0,
   })));
+});
+
+// Rinomina una conversazione
+app.patch('/chat/:sessionId', auth, (req, res) => {
+  const session = db.prepare('SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?')
+    .get(req.params.sessionId, req.user.id);
+  if (!session) return res.sendStatus(404);
+
+  const raw = req.body && req.body.title != null ? String(req.body.title).trim() : '';
+  // Stringa vuota = torna al titolo dedotto dal primo messaggio
+  const title = raw ? raw.slice(0, 80) : null;
+  db.prepare('UPDATE chat_sessions SET custom_title = ? WHERE id = ?').run(title, req.params.sessionId);
+  res.json({ ok: true, title });
 });
 
 // Elimina una conversazione (e i suoi messaggi)

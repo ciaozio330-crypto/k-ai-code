@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, useMemo, useCallback, Fragment, lazy, Suspense } from 'react';
-import JSZip from 'jszip';
+import { useEffect, useRef, useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import { VoxelTopographyGrid } from '@/components/ui/voxel-topography-grid';
 import { CodeBlock } from '@/components/ui/code-block';
+import { Prose } from '@/components/ui/prose';
 import { CommandPalette } from '@/components/ui/command-palette';
 import type { Command } from '@/components/ui/command-palette';
 import { useToast } from '@/components/ui/toast';
@@ -60,7 +60,14 @@ function saveBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+/**
+ * JSZip pesa ~850 KB e serve solo a chi preme "Scarica ZIP": importarlo in
+ * cima faceva pagare quel peso a ogni visita, anche a chi non esporta mai
+ * niente. L'import dinamico lo sposta in un chunk a parte, scaricato al
+ * primo click.
+ */
 async function downloadZip(files, baseName = 'k-ai-code') {
+  const { default: JSZip } = await import('jszip');
   const zip = new JSZip();
   const used = {};
   for (const f of files) {
@@ -126,52 +133,9 @@ const I = {
   eyeOff: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.6 10.6 0 0112 5c7 0 10.5 7 10.5 7a15.6 15.6 0 01-3.4 4.4M6.7 6.7C3.4 8.8 1.5 12 1.5 12s3.5 7 10.5 7c1.5 0 2.8-.3 4-.8"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/></svg>,
   back: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>,
   menu: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>,
+  stop: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>,
+  edit: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>,
 };
-
-function inline(text, kb) {
-  const nodes = [];
-  let rest = String(text);
-  let k = 0;
-  const re = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/;
-  while (rest.length) {
-    const m = rest.match(re);
-    if (!m) { nodes.push(rest); break; }
-    if (m.index > 0) nodes.push(rest.slice(0, m.index));
-    const t = m[0];
-    if (t[0] === '`') nodes.push(<code className="inl-code" key={kb + '-' + k++}>{t.slice(1, -1)}</code>);
-    else if (t.startsWith('**')) nodes.push(<strong key={kb + '-' + k++}>{t.slice(2, -2)}</strong>);
-    else nodes.push(<em key={kb + '-' + k++}>{t.slice(1, -1)}</em>);
-    rest = rest.slice(m.index + t.length);
-  }
-  return nodes;
-}
-
-function Prose({ text }) {
-  const lines = String(text).split('\n');
-  const blocks = [];
-  let list = null, para = [];
-  const flushP = () => { if (para.length) { blocks.push({ t: 'p', v: para }); para = []; } };
-  const flushL = () => { if (list) { blocks.push({ t: 'ul', v: list }); list = null; } };
-  for (const line of lines) {
-    const li = line.match(/^\s*[-*]\s+(.*)$/);
-    const ol = line.match(/^\s*\d+\.\s+(.*)$/);
-    const h = line.match(/^\s*(#{1,3})\s+(.*)$/);
-    if (li || ol) { flushP(); if (!list) list = []; list.push(li ? li[1] : ol[1]); }
-    else if (h) { flushP(); flushL(); blocks.push({ t: 'h', lvl: h[1].length, v: h[2] }); }
-    else if (line.trim() === '') { flushP(); flushL(); }
-    else { flushL(); para.push(line); }
-  }
-  flushP(); flushL();
-  return (
-    <>
-      {blocks.map((b, i) => {
-        if (b.t === 'ul') return <ul className="md-ul" key={i}>{b.v.map((it, j) => <li key={j}>{inline(it, i + '-' + j)}</li>)}</ul>;
-        if (b.t === 'h') return <div className={'md-h md-h' + b.lvl} key={i}>{inline(b.v, 'h' + i)}</div>;
-        return <p className="md-p" key={i}>{b.v.map((ln, j) => <Fragment key={j}>{inline(ln, i + '-' + j)}{j < b.v.length - 1 ? <br /> : null}</Fragment>)}</p>;
-      })}
-    </>
-  );
-}
 
 function Content({ text, streaming }) {
   const parts = text.split('```');
@@ -653,8 +617,18 @@ function Chat({ token, onLogout }) {
   const [atBottom, setAtBottom] = useState(true);
   /** Cassetto della sidebar: usato solo sotto i 1000px (vedi index.css). */
   const [sideOpen, setSideOpen] = useState(false);
+  /** Id della conversazione in corso di rinomina, se presente. */
+  const [renaming, setRenaming] = useState(null);
+  /** Alzato da Esc per far ignorare il blur successivo. */
+  const cancelRenameRef = useRef(false);
   /** Ultimo messaggio inviato, per la funzione "rigenera" */
   const lastSentRef = useRef(null);
+  /**
+   * Permette di interrompere una risposta in corso. Senza, una generazione
+   * lunga e già chiaramente fuori strada va guardata fino in fondo, e i
+   * token che consuma vengono comunque addebitati.
+   */
+  const abortRef = useRef(null);
 
   const fileRef = useRef(null);
   const endRef = useRef(null);
@@ -753,6 +727,20 @@ function Chat({ token, onLogout }) {
     }
   };
 
+  const renameSession = async (id, title) => {
+    setRenaming(null);
+    // Aggiorna subito la lista: aspettare la risposta per un semplice
+    // rinomina fa sembrare l'interfaccia lenta.
+    setSessions((list) => list.map((s) => (s.id === id ? { ...s, title: title.trim() || s.title } : s)));
+    try {
+      await fetch(`${API}/chat/${id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ title }) });
+      loadSessions();
+    } catch {
+      toast.error('Rinomina non riuscita', 'Il titolo non è stato salvato.');
+      loadSessions();
+    }
+  };
+
   const deleteSession = async (id, e) => {
     e?.stopPropagation();
     const ok = await toast.confirm({
@@ -817,9 +805,13 @@ function Chat({ token, onLogout }) {
       return [...base, { role: 'assistant', content: '' }];
     });
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const res = await fetch(`${API}/chat/message`, {
         method: 'POST', headers: H,
+        signal: controller.signal,
         // `regenerate` dice al backend di scartare la risposta precedente
         // invece di salvare di nuovo la stessa domanda.
         body: JSON.stringify({ sessionId, message: text, prefs, images: imgUrls, regenerate: replaceLast }),
@@ -857,16 +849,34 @@ function Chat({ token, onLogout }) {
           } catch { /* chunk parziale, arriverà completo al giro dopo */ }
         }
       }
-    } catch {
-      setMessages((m) => {
-        const c = [...m];
-        c[c.length - 1] = { role: 'assistant', content: '', failed: true };
-        return c;
-      });
-      toast.error('Connessione interrotta', 'La risposta non è arrivata. Puoi riprovare.');
+    } catch (e) {
+      if (e?.name === 'AbortError') {
+        // Interruzione voluta: tieni il testo arrivato fin qui e segnalo,
+        // invece di trattarlo come un errore di rete.
+        setMessages((m) => {
+          const c = [...m];
+          const last = c[c.length - 1];
+          if (last && last.role === 'assistant') last.stopped = true;
+          return [...c];
+        });
+      } else {
+        setMessages((m) => {
+          const c = [...m];
+          c[c.length - 1] = { role: 'assistant', content: '', failed: true };
+          return c;
+        });
+        toast.error('Connessione interrotta', 'La risposta non è arrivata. Puoi riprovare.');
+      }
     }
+    abortRef.current = null;
     setBusy(false);
     loadSessions();
+  };
+
+  /** Interrompe la generazione in corso. */
+  const stopGeneration = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
   };
 
   const send = async (preset?: string) => {
@@ -1012,9 +1022,33 @@ function Chat({ token, onLogout }) {
                 <motion.div key={s.id} layout
                   initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-                  className={`conv-item ${s.id === sessionId ? 'active' : ''}`} onClick={() => openSession(s.id)}>
-                  <span className="ci-title">{s.title}</span>
-                  <button className="ci-del" onClick={(e) => deleteSession(s.id, e)} title="Elimina" aria-label="Elimina">×</button>
+                  className={`conv-item ${s.id === sessionId ? 'active' : ''}`}
+                  onClick={() => renaming !== s.id && openSession(s.id)}>
+                  {renaming === s.id ? (
+                    <input
+                      className="ci-rename"
+                      defaultValue={s.title}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => {
+                        // Esc alza il flag prima di togliere il fuoco: senza,
+                        // il blur che segue salverebbe comunque il testo.
+                        if (cancelRenameRef.current) { cancelRenameRef.current = false; setRenaming(null); return; }
+                        renameSession(s.id, e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur();
+                        else if (e.key === 'Escape') { cancelRenameRef.current = true; e.currentTarget.blur(); }
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <span className="ci-title">{s.title}</span>
+                      <button className="ci-act" title="Rinomina" aria-label="Rinomina"
+                        onClick={(e) => { e.stopPropagation(); setRenaming(s.id); }}>{I.edit}</button>
+                      <button className="ci-act ci-del" onClick={(e) => deleteSession(s.id, e)} title="Elimina" aria-label="Elimina">×</button>
+                    </>
+                  )}
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -1086,7 +1120,10 @@ function Chat({ token, onLogout }) {
                         <button onClick={regenerate}>Riprova</button>
                       </div>
                     ) : (
-                      <Content text={m.content} streaming={busy && i === messages.length - 1} />
+                      <>
+                        <Content text={m.content} streaming={busy && i === messages.length - 1} />
+                        {m.stopped && <div className="turn-stopped">Risposta interrotta da te.</div>}
+                      </>
                     )}
                     {m.content && !busy && (
                       <AiActions
@@ -1146,9 +1183,15 @@ function Chat({ token, onLogout }) {
                   {images.length > 0 && (
                     <span className="tool-chip">{images.length} {images.length === 1 ? 'immagine' : 'immagini'}</span>
                   )}
-                  <button className="send" onClick={() => send()} disabled={busy || (!input.trim() && images.length === 0)}>
-                    {busy ? 'Sto scrivendo…' : <>Invia {I.send}</>}
-                  </button>
+                  {busy ? (
+                    <button className="send stop" onClick={stopGeneration} title="Interrompi la risposta">
+                      {I.stop} Ferma
+                    </button>
+                  ) : (
+                    <button className="send" onClick={() => send()} disabled={!input.trim() && images.length === 0}>
+                      Invia {I.send}
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="composer-meta">
