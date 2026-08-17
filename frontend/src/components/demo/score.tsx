@@ -87,8 +87,8 @@ const ARP = {
 
 /** Quanto è presente l'arpeggio in ogni scena (0 = tacito). */
 const ARP_LEVEL = {
-  Logo: 0, Apri: 0.30, Scrivi: 0.55, Analisi: 0.22,
-  Trovato: 0.30, Correggi: 0.62, Riepilogo: 0.45, Chiusura: 0.18,
+  Logo: 0.18, Apri: 0.38, Scrivi: 0.55, Analisi: 0.32,
+  Trovato: 0.38, Correggi: 0.62, Riepilogo: 0.55, Chiusura: 0.28,
 };
 
 /**
@@ -98,11 +98,12 @@ const ARP_LEVEL = {
  * uniforme e gli effetti — che sono quelli che raccontano l'azione — non
  * emergono. La musica arretra dove parlano i suoni (la digitazione, la
  * scoperta dell'errore) e cresce dove deve portare lei (il riepilogo, la
- * chiusura).
+ * chiusura). Il fondo però resta alto: arretrare non vuol dire sparire, e
+ * a 0.26 sulla scena della digitazione il tappeto non si sentiva più.
  */
 const SCENE_LEVEL = {
-  Logo: 0.52, Apri: 0.46, Scrivi: 0.26, Analisi: 0.38,
-  Trovato: 0.34, Correggi: 0.40, Riepilogo: 0.60, Chiusura: 0.50,
+  Logo: 0.55, Apri: 0.52, Scrivi: 0.42, Analisi: 0.46,
+  Trovato: 0.44, Correggi: 0.50, Riepilogo: 0.64, Chiusura: 0.56,
 };
 
 const BPM = 80;
@@ -120,7 +121,7 @@ export class ScoreEngine {
   musicBus: any; sfxBus: any; verb: any; verbSend: any;
   noise: any; padVoices: any[]; bassVoice: any; airVoice: any;
   currentChord: any; started: boolean;
-  sceneLevel: number; volumeScale: number;
+  sceneLevel: number; volumeScale: number; hushed: boolean;
 
   constructor(ctx, opts) {
     const o = opts || {};
@@ -190,6 +191,7 @@ export class ScoreEngine {
     this.airVoice = null;
     this.currentChord = null;
     this.started = false;
+    this.hushed = false;
   }
 
   /**
@@ -496,13 +498,21 @@ export class ScoreEngine {
   }
 
   /** Zittisce le voci brevi e abbassa i letti: usato su seek e pausa. */
+  //
+  // Entrambe sono idempotenti, e non per eleganza: venivano chiamate a ogni
+  // fotogramma, e `cancelScheduledValues` cancellava le rampe di livello
+  // programmate da setChord — le dinamiche per scena non si applicavano mai.
   hush() {
+    if (this.hushed) return;
+    this.hushed = true;
     const t = this.ctx.currentTime;
     this.musicBus.gain.cancelScheduledValues(t);
     this.musicBus.gain.setTargetAtTime(0.0001, t, 0.06);
   }
 
   resume() {
+    if (!this.hushed) return;
+    this.hushed = false;
     const t = this.ctx.currentTime;
     this.musicBus.gain.cancelScheduledValues(t);
     this.musicBus.gain.setTargetAtTime(this.sceneLevel, t, 0.12);
@@ -739,11 +749,19 @@ export function ScoreTrack(props) {
     // precedente. La condizione scartava proprio i fotogrammi buoni: musica
     // ed effetti restavano muti per intero. A distinguere una riproduzione
     // da uno scorrimento bastano `playing` e l'ampiezza del passo.
-    const realPlayback = playing && dt > 0 && dt < 0.4;
-    if (!realPlayback) {
+    // Pausa vera o salto: abbassa il tappeto.
+    if (!playing || dt < 0 || dt >= 0.4) {
       eng.hush();
       return;
     }
+    // Render senza avanzamento del tempo: NON è una pausa, è solo React che
+    // ridisegna (lo stage aggiorna il proprio tempo, poi il genitore riceve
+    // onTime). Trattarlo come pausa abbassava il bus musicale a ogni tick,
+    // più in fretta di quanto il fotogramma successivo lo rialzasse: la
+    // musica spariva mentre gli effetti, che passano da un altro bus,
+    // restavano udibili.
+    if (dt === 0) return;
+
     eng.resume();
 
     const ctx = eng.ctx;
