@@ -236,15 +236,28 @@ function codeHtml(code, action) {
 async function sendEmail(to, subject, html) {
   const key = process.env.RESEND_API_KEY;
   if (!key) { console.log(`\n[DEV EMAIL] a ${to} | ${subject}\n${html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()}\n`); return true; }
+  // Scadenza obbligatoria: l'endpoint di login ATTENDE questa chiamata prima
+  // di rispondere, quindi un Resend lento appendeva l'intera richiesta e il
+  // browser restava a girare a vuoto. Il codice è già salvato in archivio
+  // prima di arrivare qui, quindi rinunciare all'invio non lo invalida:
+  // l'utente può sempre chiedere "Rinvia codice".
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: process.env.EMAIL_FROM || 'K AI Code <noreply@k-ai-support.it>', to, subject, html }),
+      signal: ctrl.signal,
     });
     if (!r.ok) console.error('Resend error:', r.status, await r.text());
     return r.ok;
-  } catch (e) { console.error('Resend fetch error:', e.message); return false; }
+  } catch (e) {
+    console.error(e.name === 'AbortError' ? 'Resend: nessuna risposta entro 8s' : 'Resend fetch error: ' + e.message);
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ---------- Auth middleware ----------

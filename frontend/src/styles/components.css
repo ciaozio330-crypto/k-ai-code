@@ -821,3 +821,27 @@ html.theme-terminal {
   border: 2px solid rgba(52, 211, 184, .22); border-top-color: #34d3b8;
   animation: lp-spin .75s linear infinite;
 }
+
+/* Avviso di attesa lunga nella schermata di accesso: il servizio va in
+   sospensione quando resta inutilizzato e il primo risveglio è lento.
+   Senza una riga di spiegazione, un bottone spento sembra un blocco. */
+.auth-wait {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.auth-wait::before {
+  content: '';
+  width: 12px; height: 12px; flex: 0 0 auto;
+  border-radius: 99px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  animation: lp-spin .8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-wait::before { animation-duration: 2.4s; }
+}

@@ -181,6 +181,42 @@ function Content({ text, streaming }) {
    AUTENTICAZIONE
    ===================================================================== */
 
+/**
+ * POST con scadenza.
+ *
+ * Senza, una richiesta che non torna lascia l'interfaccia bloccata per
+ * sempre: il bottone resta disabilitato su "Attendi…" e sembra che l'app
+ * si sia piantata. Succede davvero, perché il servizio va in sospensione
+ * quando resta inutilizzato e il primo risveglio può richiedere decine di
+ * secondi.
+ */
+async function postJson(url, body, ms = 45000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    let data: any = {};
+    try { data = await res.json(); } catch { /* risposta senza corpo */ }
+    if (!res.ok) throw new Error(data.error || `Errore ${res.status}`);
+    return data;
+  } catch (e) {
+    if (e?.name === 'AbortError') {
+      throw new Error('Il server non ha risposto in tempo. Riprova tra qualche istante.');
+    }
+    if (e instanceof TypeError) {
+      throw new Error('Non riesco a raggiungere il server. Controlla la connessione.');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function Auth({ onAuth, onBack }) {
   const toast = useToast();
   const [mode, setMode] = useState('login');
@@ -191,37 +227,54 @@ function Auth({ onAuth, onBack }) {
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  /** Vero quando l'attesa si allunga: probabile risveglio del server. */
+  const [slow, setSlow] = useState(false);
+  const slowTimer = useRef(null);
+
+  const beginWait = () => {
+    setSlow(false);
+    clearTimeout(slowTimer.current);
+    // Dopo qualche secondo diciamo che sta ancora lavorando, invece di
+    // lasciare l'utente davanti a un bottone spento senza spiegazioni.
+    slowTimer.current = setTimeout(() => setSlow(true), 4000);
+  };
+  const endWait = () => {
+    clearTimeout(slowTimer.current);
+    setSlow(false);
+    setLoading(false);
+  };
+  useEffect(() => () => clearTimeout(slowTimer.current), []);
+
+  const canStart = !loading && email.trim() !== '' && password !== '';
+  const canVerify = !loading && code.length === 6;
 
   const start = async () => {
-    setErr(''); setLoading(true);
+    // La stessa guardia del bottone: Invio non deve poterla scavalcare,
+    // altrimenti parte una richiesta coi campi vuoti o una seconda mentre
+    // la prima è ancora in volo.
+    if (!canStart) return;
+    setErr(''); setLoading(true); beginWait();
     try {
       const ep = mode === 'login' ? 'login/start' : 'register/start';
-      const res = await fetch(`${API}/auth/${ep}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Errore');
+      await postJson(`${API}/auth/${ep}`, { email: email.trim(), password });
       setStep('code'); setCode('');
-      toast.success('Codice inviato', `Controlla la casella di ${email}.`);
+      toast.success('Codice inviato', `Controlla la casella di ${email.trim()}.`);
     } catch (e) { setErr(e.message); }
-    setLoading(false);
+    endWait();
   };
 
   const verify = async () => {
-    setErr(''); setLoading(true);
+    if (!canVerify) return;
+    setErr(''); setLoading(true); beginWait();
     try {
       const ep = mode === 'login' ? 'login/verify' : 'register/verify';
-      const res = await fetch(`${API}/auth/${ep}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Errore');
+      const data = await postJson(`${API}/auth/${ep}`, { email: email.trim(), code });
       localStorage.setItem('token', data.token);
+      endWait();
       onAuth(data.token);
+      return;
     } catch (e) { setErr(e.message); }
-    setLoading(false);
+    endWait();
   };
 
   const switchMode = () => { setMode(mode === 'login' ? 'signup' : 'login'); setStep('form'); setErr(''); };
@@ -247,9 +300,16 @@ function Auth({ onAuth, onBack }) {
           <span className="tag">Code</span>
         </div>
 
-        <AnimatePresence mode="wait" initial={false}>
+        {/* Niente AnimatePresence con mode="wait": il pannello successivo si
+            monterebbe solo dopo l'uscita del precedente, e quell'animazione
+            gira su requestAnimationFrame. Chi preme Invio va quasi sempre a
+            controllare la posta — cioè cambia scheda — e in secondo piano
+            quel loop si ferma: al ritorno si ritrova il modulo di prima,
+            esattamente come se si fosse bloccato. Cambiando `key` React
+            monta subito, e resta solo l'animazione d'ingresso. */}
+        <div>
           {step === 'form' ? (
-            <motion.div key="form" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}>
+            <motion.div key="form" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}>
               <p className="auth-lead">
                 {mode === 'login'
                   ? 'Bentornato. Accedi per riprendere le tue conversazioni.'
@@ -257,7 +317,9 @@ function Auth({ onAuth, onBack }) {
               </p>
               <label className="field">
                 <span className="lbl">Email</span>
-                <input type="email" autoComplete="email" placeholder="dev@server.net" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input type="email" autoComplete="email" placeholder="dev@server.net" value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); start(); } }} />
               </label>
               <label className="field">
                 <span className="lbl">Password</span>
@@ -265,7 +327,8 @@ function Auth({ onAuth, onBack }) {
                   <input type={showPassword ? 'text' : 'password'}
                     autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                     placeholder="La tua password" value={password}
-                    onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && start()} />
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); start(); } }} />
                   <button type="button" className="field-pw-toggle" onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? 'Nascondi password' : 'Mostra password'} tabIndex={-1}>
                     {showPassword ? I.eyeOff : I.eye}
@@ -273,32 +336,35 @@ function Auth({ onAuth, onBack }) {
                 </div>
               </label>
               {err && <p className="err">{err}</p>}
-              <button className="btn" style={{ marginTop: 6 }} onClick={start} disabled={loading || !email || !password}>
+              <button className="btn" style={{ marginTop: 6 }} onClick={start} disabled={!canStart}>
                 {loading ? 'Attendi…' : mode === 'login' ? 'Accedi' : 'Crea account'}
               </button>
+              {slow && <p className="auth-wait">Il server si sta riavviando, può richiedere fino a un minuto…</p>}
               <div><button className="link" onClick={switchMode}>
                 {mode === 'login' ? 'Non hai un account? Registrati' : 'Hai gia un account? Accedi'}
               </button></div>
             </motion.div>
           ) : (
-            <motion.div key="code" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}>
+            <motion.div key="code" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}>
               <p className="auth-lead">Ti abbiamo inviato un codice a 6 cifre a <b>{email}</b>. Inseriscilo per {mode === 'login' ? 'accedere' : 'completare la registrazione'}.</p>
               <label className="field">
                 <span className="lbl">Codice di verifica</span>
                 <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="123456" value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => e.key === 'Enter' && verify()} />
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); verify(); } }} />
               </label>
               {err && <p className="err">{err}</p>}
-              <button className="btn" style={{ marginTop: 6 }} onClick={verify} disabled={loading || code.length < 6}>
+              <button className="btn" style={{ marginTop: 6 }} onClick={verify} disabled={!canVerify}>
                 {loading ? 'Verifico…' : 'Verifica'}
               </button>
+              {slow && <p className="auth-wait">Il server si sta riavviando, può richiedere fino a un minuto…</p>}
               <div style={{ display: 'flex', gap: 14 }}>
                 <button className="link" onClick={() => { setStep('form'); setErr(''); }}>Indietro</button>
                 <button className="link" onClick={start} disabled={loading}>Rinvia codice</button>
               </div>
             </motion.div>
           )}
-        </AnimatePresence>
+        </div>
       </div>
     </div>
   );
