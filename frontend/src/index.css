@@ -1,4 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Playfair+Display:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+/* Fraunces per i titoli: serif variabile ad alto contrasto, con più
+   carattere di Playfair alle dimensioni grandi. Il testo corrente usa Geist,
+   che è già una dipendenza del progetto e viene servito da qui (nessuna
+   richiesta esterna). JetBrains Mono allinea il codice del sito a quello
+   della demo, che già la usava. */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import 'tailwindcss';
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -73,9 +78,9 @@
   --r-lg: 14px;
   --r-xl: 18px;
 
-  --f-body: 'Inter', system-ui, -apple-system, sans-serif;
-  --f-serif: 'Playfair Display', Georgia, serif;
-  --f-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+  --f-body: 'Geist Variable', 'Geist', system-ui, -apple-system, sans-serif;
+  --f-serif: 'Fraunces', 'Playfair Display', Georgia, serif;
+  --f-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
 
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -683,8 +688,8 @@ html.theme-terminal {
   --btn-fill-text: #3ff0a0;
   --on-accent: #071b0f;
 
-  --f-body: 'IBM Plex Mono', ui-monospace, monospace;
-  --f-serif: 'IBM Plex Mono', ui-monospace, monospace;
+  --f-body: 'JetBrains Mono', ui-monospace, monospace;
+  --f-serif: 'JetBrains Mono', ui-monospace, monospace;
 }
 html.theme-terminal * { border-radius: 4px !important; }
 html.theme-terminal .new-btn, html.theme-terminal .btn, html.theme-terminal .send,

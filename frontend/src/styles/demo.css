@@ -1,6 +1,6 @@
 /* I due font della coreografia. Stanno qui e non in index.css perché questo
    foglio viaggia col chunk della demo: chi non apre il video non li scarica. */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&display=swap');
 
 /* ============================================================
    K AI CODE — DEMO DAL VIVO

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion, useScroll, useTransform } from 'motion/react';
 import { VoxelTopographyGrid } from '@/components/ui/voxel-topography-grid';
 import { CodeBlock } from '@/components/ui/code-block';
 import { Icon } from '@/components/ui/icons';
@@ -8,6 +8,9 @@ import {
   PLANS, TEAMS, FEATURES, STEPS, FAQS, TESTIMONIALS, LANGS, DEMO_TURNS,
 } from '@/lib/plans';
 import { useReveal, useScrollSpy, useScrolled, useCountUp, useLockBodyScroll } from '@/lib/hooks';
+import {
+  tEnter, tSection, tQuick, springSnappy, springSoft, staggerParent, staggerChild, EASE_OUT,
+} from '@/lib/motion';
 
 /* =====================================================================
    Utility di presentazione
@@ -42,7 +45,7 @@ function Reveal({
       className={className}
       initial={{ opacity: 0, y }}
       animate={visible ? { opacity: 1, y: 0 } : { opacity: 0, y }}
-      transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ ...tSection, delay }}
     >
       {children}
     </MotionTag>
@@ -116,7 +119,7 @@ function Nav({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) {
                   <motion.span
                     layoutId="nav-underline"
                     className="lp-nav-underline"
-                    transition={{ type: 'spring', stiffness: 480, damping: 38 }}
+                    transition={springSnappy}
                   />
                 )}
               </button>
@@ -152,7 +155,7 @@ function Nav({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) {
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            transition={tQuick}
           >
             {NAV_LINKS.map((l) => (
               <button key={l.id} onClick={() => go(l.id)}>
@@ -288,26 +291,40 @@ function StatItem({ value, suffix, label }: { value: number; suffix: string; lab
 }
 
 function Hero({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) {
+  const reduced = useReducedMotion();
+  const ref = useRef<HTMLElement | null>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] });
+
+  // Parallasse: il terreno scorre più lentamente del testo che gli sta sopra.
+  // È ciò che fa leggere le colonne come sfondo lontano invece che come un
+  // motivo incollato alla pagina. Disattivata con "riduci animazioni", dove
+  // un fondale che si muove da solo è esattamente ciò che dà fastidio.
+  const bgY = useTransform(scrollYProgress, [0, 1], ['0%', reduced ? '0%' : '14%']);
+  const copyY = useTransform(scrollYProgress, [0, 1], ['0%', reduced ? '0%' : '-6%']);
+  const copyFade = useTransform(scrollYProgress, [0, 0.75], [1, reduced ? 1 : 0.25]);
+
   return (
-    <section className="lp-hero" id="top">
-      <div className="lp-hero-bg" aria-hidden="true">
+    <section className="lp-hero" id="top" ref={ref}>
+      <motion.div className="lp-hero-bg" aria-hidden="true" style={{ y: bgY }}>
         <VoxelTopographyGrid
           primaryColor="#34d3b8"
           wireColor="rgba(52, 211, 184, 0.32)"
           bgColor="#020617"
           speed={0.011}
-          tileSize={40}
-          maxHeight={62}
+          tileSize={62}
+          maxHeight={120}
           interactive={false}
+          horizon={0.3}
         />
-      </div>
+      </motion.div>
 
       <div className="lp-hero-inner">
         <motion.div
           className="hero-copy"
           initial="hidden"
           animate="show"
-          variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09, delayChildren: 0.1 } } }}
+          style={{ y: copyY, opacity: copyFade }}
+          variants={staggerParent(0.08)}
         >
           <motion.a
             className="hero-badge"
@@ -316,7 +333,7 @@ function Hero({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) 
               e.preventDefault();
               document.getElementById('funzioni')?.scrollIntoView({ behavior: 'smooth' });
             }}
-            variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0 } }}
+            variants={staggerChild}
           >
             <span className="hero-badge-dot" />
             Specializzato su Paper, Spigot, Fabric e Forge
@@ -325,7 +342,7 @@ function Hero({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) 
 
           <motion.h1
             className="hero-title"
-            variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}
+            variants={staggerChild}
           >
             Scrivi il plugin.
             <br />
@@ -334,17 +351,17 @@ function Hero({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) 
 
           <motion.p
             className="hero-sub"
-            variants={{ hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } }}
+            variants={staggerChild}
           >
-            L'assistente di programmazione che conosce le API di Minecraft versione per
-            versione. Descrivi cosa ti serve in italiano, ricevi file completi e
-            compilabili, scaricali in ZIP. Dallo stack trace alla patch, nella stessa
-            conversazione.
+            Conosce Bukkit, Paper, Fabric e Forge versione per versione — anche quali
+            metodi sono deprecati e da quando. Gli descrivi il problema in italiano,
+            ti restituisce file interi che compilano. Dallo stack trace alla patch,
+            senza cambiare finestra.
           </motion.p>
 
           <motion.div
             className="hero-cta"
-            variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
+            variants={staggerChild}
           >
             <button className="lp-primary-btn lg" onClick={onStart}>
               Inizia gratis
@@ -357,14 +374,14 @@ function Hero({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) 
 
           <motion.p
             className="hero-fineprint"
-            variants={{ hidden: { opacity: 0 }, show: { opacity: 1 } }}
+            variants={staggerChild}
           >
-            Piano Free senza carta di credito · 15k token ogni 4 ore
+            Gratis per iniziare · nessuna carta · 15k token ogni 4 ore
           </motion.p>
 
           <motion.div
             className="hero-stats"
-            variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
+            variants={staggerChild}
           >
             <StatItem value={1} suffix="M" label="token di contesto" />
             <StatItem value={40} suffix="+" label="linguaggi supportati" />
@@ -419,8 +436,8 @@ function Features() {
       <div className="lp-container">
         <SectionHead
           kicker="Cosa sa fare"
-          title={<>Costruito per chi sviluppa <span className="accent-text">sul serio</span></>}
-          sub="Non un chatbot generico con un prompt di sistema a tema. Uno strumento che conosce il dominio e produce output che compila."
+          title={<>Conosce il dominio, <span className="accent-text">non solo il linguaggio</span></>}
+          sub="La differenza fra un assistente generico e uno che ha letto le API: sapere che getTeam() torna null dopo un reload, e dirtelo prima che il server cada."
         />
 
         <div className="bento">
@@ -544,7 +561,7 @@ function Showcase() {
         <SectionHead
           kicker="In azione"
           title={<>Tre problemi veri, <span className="accent-text">tre risposte</span></>}
-          sub="Esempi reali di conversazione. Nessuno di questi è uno snippet inventato per la vetrina: sono i casi che si incontrano gestendo un server."
+          sub="Nessuno di questi è uno snippet costruito per la vetrina. Sono i casi che capitano davvero gestendo un server, con il codice che ne esce."
         />
 
         <Reveal className="showcase">
@@ -561,7 +578,7 @@ function Showcase() {
                   <motion.span
                     layoutId="showcase-pill"
                     className="showcase-pill"
-                    transition={{ type: 'spring', stiffness: 420, damping: 36 }}
+                    transition={springSnappy}
                   />
                 )}
                 <span className="showcase-tab-label">{s.tab}</span>
@@ -579,7 +596,7 @@ function Showcase() {
               className="showcase-body"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+              transition={tEnter}
             >
               <div className="showcase-prompt">
                 <span className="showcase-you">Tu</span>
@@ -647,7 +664,7 @@ function Pricing({ onStart }: { onStart: () => void }) {
         <SectionHead
           kicker="Prezzi"
           title={<>Paghi i token, <span className="accent-text">non le postazioni</span></>}
-          sub="Ogni piano definisce quanti token puoi usare in una finestra di 4 ore. Allo scadere si ricarica interamente. Cambi o disdici quando vuoi."
+          sub="Ogni piano ti dà un tot di token ogni 4 ore, e allo scadere la finestra si ricarica per intero. Nessun vincolo di durata: cambi o disdici quando vuoi."
         />
 
         <Reveal className="price-toggles">
@@ -677,7 +694,7 @@ function Pricing({ onStart }: { onStart: () => void }) {
               className="price-grid"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              transition={tEnter}
             >
               {PLANS.map((p) => (
                 <div
@@ -734,7 +751,7 @@ function Pricing({ onStart }: { onStart: () => void }) {
               className="price-grid teams"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              transition={tEnter}
             >
               {TEAMS.map((t) => (
                 <div
@@ -856,7 +873,7 @@ function Faq() {
                   <motion.span
                     className="faq-chev"
                     animate={{ rotate: isOpen ? 180 : 0 }}
-                    transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                    transition={tQuick}
                   >
                     {Icon.chevron}
                   </motion.span>
@@ -868,7 +885,7 @@ function Faq() {
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                      transition={tEnter}
                     >
                       <p className="faq-a">{f.a}</p>
                     </motion.div>
@@ -896,9 +913,10 @@ function FinalCta({ onStart }: { onStart: () => void }) {
           wireColor="rgba(52, 211, 184, 0.28)"
           bgColor="#020617"
           speed={0.009}
-          tileSize={46}
-          maxHeight={52}
+          tileSize={58}
+          maxHeight={104}
           interactive={false}
+          horizon={0.32}
         />
       </div>
       <Reveal className="lp-cta-inner">
@@ -909,8 +927,8 @@ function FinalCta({ onStart }: { onStart: () => void }) {
           <span className="hero-grad">in un pomeriggio.</span>
         </h2>
         <p className="lp-cta-sub">
-          Piano Free attivo subito, senza carta di credito. Se non ti convince,
-          hai perso il tempo di scrivere una email.
+          Piano gratuito attivo subito, senza carta. Nel peggiore dei casi ci hai
+          perso il tempo di scrivere una email.
         </p>
         <div className="lp-cta-actions">
           <button className="lp-primary-btn lg" onClick={onStart}>
@@ -1001,7 +1019,7 @@ function VideoModal({ onClose }: { onClose: () => void }) {
         initial={{ opacity: 0, scale: 0.95, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 10 }}
-        transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+        transition={springSnappy}
       >
         <button className="modal-close" onClick={onClose} aria-label="Chiudi">×</button>
         <Suspense fallback={<div className="dm-loading" aria-label="Caricamento della demo" />}>

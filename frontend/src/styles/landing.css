@@ -86,8 +86,11 @@ html.landing-mode #root { height: auto; }
 .sec-head.center .kicker::before { display: none; }
 
 .sec-title {
-  font-size: clamp(30px, 4.4vw, 46px); font-weight: 700; line-height: 1.12;
-  letter-spacing: -0.032em; margin: 0 0 16px; color: var(--lp-text);
+  font-family: var(--f-serif);
+  /* Un serif ha già forme più larghe e contrastate: la spaziatura negativa
+     va alleggerita rispetto al sans, altrimenti le lettere si toccano. */
+  font-size: clamp(31px, 4.6vw, 50px); font-weight: 600; line-height: 1.1;
+  letter-spacing: -0.02em; margin: 0 0 16px; color: var(--lp-text);
   /* Evita che l'ultima parola resti orfana su una riga tutta sua.
      Progressivo: i browser che non lo supportano vanno a capo come sempre. */
   text-wrap: balance;
@@ -217,18 +220,29 @@ html.landing-mode #root { height: auto; }
   padding: calc(var(--lp-nav-h) + 60px) 0 80px;
   overflow: hidden;
 }
-.lp-hero-bg { position: absolute; inset: 0; z-index: 0; }
-/* Il terreno voxel è una texture di fondo, non un protagonista: a piena
-   intensità inonda di teal la colonna del testo e il contrasto crolla.
-   L'opacità sul canvas lo attenua in modo uniforme, i gradienti sopra
-   scavano la zona dove cadono titolo e sottotitolo. */
-.lp-hero-bg canvas { opacity: .5; }
+/* Il terreno voxel occupa solo la fascia bassa della hero e si dissolve
+   verso l'alto: le colonne spuntano dal bordo inferiore invece di essere
+   una lastra sospesa a metà schermo. Si legge come un orizzonte, dà
+   profondità e lascia libera la parte alta per il titolo.
+   Prima riempiva l'inquadratura intera, e nessuna vignettatura poteva
+   risolverlo — il problema era la posizione, non la luminosità. */
+.lp-hero-bg {
+  position: absolute; left: 0; right: 0; bottom: 0; top: auto;
+  height: 58%;
+  z-index: 0;
+  -webkit-mask-image: linear-gradient(to top, #000 26%, rgba(0,0,0,.55) 58%, transparent 96%);
+  mask-image: linear-gradient(to top, #000 26%, rgba(0,0,0,.55) 58%, transparent 96%);
+}
+.lp-hero-bg canvas { opacity: .9; }
+/* Vignettatura laterale: tiene le colonne al centro-basso e impedisce che
+   il teal risalga dietro al testo. */
 .lp-hero-bg::after {
   content: ''; position: absolute; inset: 0;
   background:
-    radial-gradient(880px 620px at 26% 48%, rgba(6, 8, 12, 0.96), rgba(6, 8, 12, 0.66) 54%, transparent 78%),
-    radial-gradient(1100px 660px at 50% 106%, rgba(6, 8, 12, 0.98), transparent 72%),
-    linear-gradient(180deg, rgba(6,8,12,.9) 0%, rgba(6,8,12,.62) 30%, rgba(6,8,12,.74) 72%, var(--lp-bg) 100%);
+    /* Solo i fianchi e la fascia alta: il bordo inferiore va lasciato
+       pulito, è lì che le colonne devono staccare. */
+    linear-gradient(90deg, rgba(6,8,12,.85) 0%, transparent 26%, transparent 74%, rgba(6,8,12,.85) 100%),
+    linear-gradient(180deg, rgba(6,8,12,.7) 0%, transparent 42%);
 }
 .lp-hero-fade {
   position: absolute; left: 0; right: 0; bottom: 0; height: 160px; z-index: 1;
@@ -240,6 +254,19 @@ html.landing-mode #root { height: auto; }
   max-width: var(--lp-max); margin: 0 auto; padding: 0 26px; width: 100%;
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.02fr);
   gap: 54px; align-items: center;
+}
+
+/* Scrim dietro la colonna di testo.
+   Con il terreno acceso in basso, la riga sotto i pulsanti e le etichette
+   dei numeri finivano sopra le colonne più chiare e sparivano. Meglio
+   proteggere il testo dove serve che spegnere lo sfondo ovunque: le
+   colonne restano piene sulla destra e al centro. */
+.hero-copy { position: relative; }
+.hero-copy::before {
+  content: ''; position: absolute; z-index: -1; pointer-events: none;
+  inset: -60px -90px -70px -80px;
+  background: radial-gradient(58% 62% at 32% 58%,
+    rgba(6, 8, 12, 0.94), rgba(6, 8, 12, 0.7) 58%, transparent 86%);
 }
 
 .hero-badge {
@@ -261,9 +288,13 @@ html.landing-mode #root { height: auto; }
 .hero-badge-arrow svg { width: 14px; height: 14px; }
 
 .hero-title {
-  font-size: clamp(38px, 6.2vw, 68px); font-weight: 700; line-height: 1.04;
-  letter-spacing: -0.042em; margin: 0 0 22px; color: var(--lp-text);
+  font-family: var(--f-serif);
+  font-size: clamp(40px, 6.6vw, 76px); font-weight: 600; line-height: 1.02;
+  letter-spacing: -0.026em; margin: 0 0 22px; color: var(--lp-text);
 }
+/* La seconda riga in corsivo: è il gesto che fa leggere il titolo come
+   editoriale invece che come un'intestazione di prodotto qualsiasi. */
+.hero-title .hero-grad { font-style: italic; font-weight: 500; }
 .hero-grad {
   background: linear-gradient(102deg, var(--lp-accent) 8%, var(--lp-accent-bright) 55%, #9df0e2 95%);
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
@@ -429,7 +460,7 @@ html.landing-mode #root { height: auto; }
   border: 1px solid rgba(52,211,184,.2); margin-bottom: 4px;
 }
 .bento-title {
-  font-size: 17px; font-weight: 650; letter-spacing: -0.018em; margin: 0; color: var(--lp-text);
+  font-size: 17.5px; font-weight: 600; letter-spacing: -0.014em; margin: 0; color: var(--lp-text);
 }
 .bento-body { font-size: 14px; line-height: 1.68; color: var(--lp-text-3); margin: 0; }
 
@@ -490,7 +521,7 @@ html.landing-mode #root { height: auto; }
   width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center;
   margin-bottom: 6px;
 }
-.step-title { font-size: 19px; font-weight: 650; letter-spacing: -0.02em; margin: 0; color: var(--lp-text); }
+.step-title { font-family: var(--f-serif); font-size: 21px; font-weight: 600; letter-spacing: -0.015em; margin: 0; color: var(--lp-text); }
 .step-body { font-size: 14.5px; line-height: 1.68; color: var(--lp-text-3); margin: 0; }
 .step-line {
   position: absolute; top: 31px; left: 60px; right: -22px; height: 1px;
@@ -540,7 +571,7 @@ html.landing-mode #root { height: auto; }
   color: #04231d; border-radius: 99px; padding: 5px 13px; white-space: nowrap;
   box-shadow: 0 6px 18px -8px rgba(52,211,184,.9);
 }
-.price-name { font-size: 16px; font-weight: 650; letter-spacing: -0.015em; margin: 0; color: var(--lp-text); }
+.price-name { font-family: var(--f-serif); font-size: 18px; font-weight: 600; letter-spacing: -0.012em; margin: 0; color: var(--lp-text); }
 .price-amount { display: flex; align-items: baseline; gap: 3px; }
 .price-amount .cur { font-size: 18px; font-weight: 600; color: var(--lp-text-3); align-self: flex-start; margin-top: 6px; }
 .price-amount b { font-size: 40px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; color: var(--lp-text); }
@@ -598,8 +629,8 @@ html.landing-mode #root { height: auto; }
 .faq-item.open { border-color: rgba(52,211,184,.32); background: var(--lp-surface-2); }
 .faq-q {
   width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 18px;
-  padding: 19px 22px; text-align: left;
-  font-size: 15px; font-weight: 600; letter-spacing: -0.012em; color: var(--lp-text);
+  padding: 20px 22px; text-align: left;
+  font-size: 15.5px; font-weight: 550; letter-spacing: -0.008em; color: var(--lp-text);
 }
 .faq-chev { display: inline-flex; color: var(--lp-text-4); flex: 0 0 auto; }
 .faq-item.open .faq-chev { color: var(--lp-accent); }
@@ -614,19 +645,26 @@ html.landing-mode #root { height: auto; }
   position: relative; overflow: hidden; padding: 120px 26px 128px;
   display: flex; align-items: center; justify-content: center; text-align: center;
 }
-.lp-cta-bg { position: absolute; inset: 0; z-index: 0; }
-.lp-cta-bg canvas { opacity: .42; }
+.lp-cta-bg {
+  position: absolute; left: 0; right: 0; bottom: 0; top: auto;
+  height: 52%; z-index: 0;
+  -webkit-mask-image: linear-gradient(to top, #000 22%, transparent 92%);
+  mask-image: linear-gradient(to top, #000 22%, transparent 92%);
+}
+.lp-cta-bg canvas { opacity: .78; }
 .lp-cta-bg::after {
   content: ''; position: absolute; inset: 0;
   background:
-    radial-gradient(780px 470px at 50% 50%, rgba(6,8,12,.94), rgba(6,8,12,.6) 62%, transparent 80%),
-    linear-gradient(180deg, var(--lp-bg) 0%, rgba(6,8,12,.72) 30%, rgba(6,8,12,.76) 70%, var(--lp-bg) 100%);
+    linear-gradient(90deg, rgba(6,8,12,.8) 0%, transparent 24%, transparent 76%, rgba(6,8,12,.8) 100%),
+    linear-gradient(180deg, rgba(6,8,12,.72) 0%, transparent 46%);
 }
 .lp-cta-inner { position: relative; z-index: 1; max-width: 700px; }
 .lp-cta-title {
-  font-size: clamp(32px, 5.4vw, 56px); font-weight: 700; line-height: 1.08;
-  letter-spacing: -0.04em; margin: 0 0 20px; color: var(--lp-text);
+  font-family: var(--f-serif);
+  font-size: clamp(33px, 5.6vw, 60px); font-weight: 600; line-height: 1.06;
+  letter-spacing: -0.024em; margin: 0 0 20px; color: var(--lp-text);
 }
+.lp-cta-title .hero-grad { font-style: italic; font-weight: 500; }
 .lp-cta-sub { font-size: clamp(15px, 1.7vw, 17px); line-height: 1.65; color: var(--lp-text-2); margin: 0 0 32px; }
 .lp-cta-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
 

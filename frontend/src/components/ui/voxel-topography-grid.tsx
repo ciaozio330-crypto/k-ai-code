@@ -11,6 +11,17 @@ export interface VoxelTopographyGridProps {
   bgColor?: string;
   /** Disattiva il rilievo che segue il cursore (per sfondi puramente decorativi). */
   interactive?: boolean;
+  /**
+   * Dove cade l'origine della griglia, come frazione dell'altezza.
+   *
+   * Il valore di partenza (~0.31) tiene il terreno sospeso a metà schermo,
+   * e letto in una hero sembra una lastra che galleggia. Spingendo l'origine
+   * verso il basso (o oltre 1) la griglia esce dall'inquadratura e restano
+   * visibili solo le cime delle colonne che spuntano dal bordo inferiore:
+   * si legge come un orizzonte, dà profondità e libera la parte alta per il
+   * titolo.
+   */
+  horizon?: number;
 }
 
 export function VoxelTopographyGrid({
@@ -22,6 +33,7 @@ export function VoxelTopographyGrid({
   className = '',
   bgColor = '#020617',
   interactive = true,
+  horizon = 1 / 3.2,
 }: VoxelTopographyGridProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -200,7 +212,7 @@ export function VoxelTopographyGrid({
       const gridRows = Math.ceil(height / tileH) + 8;
 
       const originX = width * 0.5;
-      const originY = height / 3.2;
+      const originY = height * horizon;
 
       const startR = -Math.floor(gridRows / 2);
       const endR = Math.ceil(gridRows / 2);
@@ -325,7 +337,7 @@ export function VoxelTopographyGrid({
       container.removeEventListener('pointerleave', handlePointerLeave);
       cancelAnimationFrame(animationFrameId);
     };
-  }, [tileSize, maxHeight, primaryColor, wireColor, speed, bgColor, interactive]);
+  }, [tileSize, maxHeight, primaryColor, wireColor, speed, bgColor, interactive, horizon]);
 
   return (
     <div

@@ -40,7 +40,7 @@ const THEMES = {
 
 const SANS = "'Manrope', system-ui, sans-serif";
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
-const SERIF = "'Playfair Display', Georgia, serif";
+const SERIF = "'Fraunces', 'Playfair Display', Georgia, serif";
 
 const MOTION = {
   enter: (from, to, start, end) => animate({ from, to, start, end, ease: Easing.easeOutCubic }),
