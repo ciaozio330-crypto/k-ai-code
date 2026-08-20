@@ -4,12 +4,16 @@ import { VoxelTopographyGrid } from '@/components/ui/voxel-topography-grid';
 import { CodeBlock } from '@/components/ui/code-block';
 import { Icon } from '@/components/ui/icons';
 import type { IconName } from '@/components/ui/icons';
+import { LanguageSwitcher } from '@/components/ui/language-switcher';
 import {
-  PLANS, TEAMS, FEATURES, STEPS, FAQS, TESTIMONIALS, LANGS, DEMO_TURNS,
+  PLANS, TEAMS, FEATURE_META, TESTIMONIAL_PEOPLE, LANG_KEYS, LANG_LABELS,
+  DEMO_TURN, SHOWCASE_SOURCES,
 } from '@/lib/plans';
+import { useI18n } from '@/lib/i18n';
+import type { Dict } from '@/locales/it';
 import { useReveal, useScrollSpy, useScrolled, useCountUp, useLockBodyScroll } from '@/lib/hooks';
 import {
-  tEnter, tSection, tQuick, springSnappy, springSoft, staggerParent, staggerChild, EASE_OUT,
+  tEnter, tSection, tQuick, springSnappy, staggerParent, staggerChild,
 } from '@/lib/motion';
 
 /* =====================================================================
@@ -73,23 +77,45 @@ function SectionHead({
   );
 }
 
+/**
+ * Titolo di sezione in due tempi: la seconda metà accentata.
+ *
+ * Le lingue non mettono l'enfasi nello stesso punto della frase, quindi lo
+ * spezzone accentato è una chiave separata del dizionario invece che una
+ * sottostringa individuata a runtime.
+ */
+function splitTitle(a: string, b: string) {
+  return (
+    <>
+      {a} <span className="accent-text">{b}</span>
+    </>
+  );
+}
+
 /* =====================================================================
    NAVIGAZIONE
    ===================================================================== */
 
-const NAV_LINKS = [
-  { id: 'funzioni', label: 'Funzioni' },
-  { id: 'demo', label: 'Demo' },
-  { id: 'come-funziona', label: 'Come funziona' },
-  { id: 'prezzi', label: 'Prezzi' },
-  { id: 'domande', label: 'Domande' },
-];
+const NAV_IDS = ['funzioni', 'demo', 'come-funziona', 'prezzi', 'domande'] as const;
+
+function navLinks(t: Dict) {
+  return [
+    { id: 'funzioni', label: t.nav.features },
+    { id: 'demo', label: t.nav.demo },
+    { id: 'come-funziona', label: t.nav.how },
+    { id: 'prezzi', label: t.nav.pricing },
+    { id: 'domande', label: t.nav.faq },
+  ];
+}
 
 function Nav({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) {
+  const { t } = useI18n();
   const scrolled = useScrolled(20);
-  const active = useScrollSpy(NAV_LINKS.map((l) => l.id));
+  const active = useScrollSpy(NAV_IDS as unknown as string[]);
   const [open, setOpen] = useState(false);
   useLockBodyScroll(open);
+
+  const links = navLinks(t);
 
   const go = (id: string) => {
     setOpen(false);
@@ -107,8 +133,8 @@ function Nav({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) {
             </span>
           </button>
 
-          <nav className="lp-nav-links" aria-label="Sezioni">
-            {NAV_LINKS.map((l) => (
+          <nav className="lp-nav-links" aria-label={t.nav.sections}>
+            {links.map((l) => (
               <button
                 key={l.id}
                 className={active === l.id ? 'lp-nav-link on' : 'lp-nav-link'}
@@ -127,19 +153,20 @@ function Nav({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) {
           </nav>
 
           <div className="lp-nav-cta">
+            <LanguageSwitcher />
             <button className="lp-ghost-btn hide-sm" onClick={onDemo}>
-              {Icon.play} Demo
+              {Icon.play} {t.nav.demo}
             </button>
             <button className="lp-ghost-btn" onClick={onStart}>
-              Accedi
+              {t.nav.login}
             </button>
             <button className="lp-primary-btn sm" onClick={onStart}>
-              Inizia gratis
+              {t.nav.start}
             </button>
             <button
               className="lp-burger"
               onClick={() => setOpen((v) => !v)}
-              aria-label={open ? 'Chiudi menu' : 'Apri menu'}
+              aria-label={open ? t.nav.closeMenu : t.nav.openMenu}
               aria-expanded={open}
             >
               {open ? Icon.close : Icon.menu}
@@ -157,15 +184,15 @@ function Nav({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) {
             exit={{ opacity: 0, y: -12 }}
             transition={tQuick}
           >
-            {NAV_LINKS.map((l) => (
+            {links.map((l) => (
               <button key={l.id} onClick={() => go(l.id)}>
                 {l.label}
               </button>
             ))}
             <div className="lp-mobile-sep" />
-            <button onClick={() => { setOpen(false); onDemo(); }}>Guarda la demo</button>
+            <button onClick={() => { setOpen(false); onDemo(); }}>{t.nav.watchDemo}</button>
             <button className="accent" onClick={() => { setOpen(false); onStart(); }}>
-              Inizia gratis
+              {t.nav.start}
             </button>
           </motion.div>
         )}
@@ -184,24 +211,30 @@ function Nav({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) {
  * in funzione senza obbligare l'utente a registrarsi prima.
  */
 function DemoReplay() {
+  const { t } = useI18n();
   const reduced = useReducedMotion();
-  const turn = DEMO_TURNS[0];
+  const prompt = t.hero.demoPrompt;
   const [phase, setPhase] = useState<'typing' | 'thinking' | 'answer'>('typing');
   const [typed, setTyped] = useState('');
 
   useEffect(() => {
     if (reduced) {
-      setTyped(turn.user);
+      setTyped(prompt);
       setPhase('answer');
       return;
     }
+    // Cambiando lingua la frase è un'altra: si riparte da capo invece di
+    // continuare a scrivere sopra i caratteri della precedente.
+    setTyped('');
+    setPhase('typing');
+
     let i = 0;
     let timer: ReturnType<typeof setTimeout>;
 
     const typeNext = () => {
       i++;
-      setTyped(turn.user.slice(0, i));
-      if (i < turn.user.length) {
+      setTyped(prompt.slice(0, i));
+      if (i < prompt.length) {
         // Velocità leggermente variabile: la digitazione a passo fisso
         // si riconosce subito come finta.
         timer = setTimeout(typeNext, 16 + Math.random() * 26);
@@ -214,13 +247,13 @@ function DemoReplay() {
     };
     timer = setTimeout(typeNext, 700);
     return () => clearTimeout(timer);
-  }, [reduced, turn.user]);
+  }, [reduced, prompt]);
 
   return (
     <div className="demo-window">
       <div className="demo-chrome">
         <span className="demo-dots"><i /><i /><i /></span>
-        <span className="demo-title">K AI Code — conversazione</span>
+        <span className="demo-title">K AI Code — {t.hero.conversation}</span>
         <span className="demo-badge"><span className="demo-live-dot" /> live</span>
       </div>
 
@@ -256,15 +289,17 @@ function DemoReplay() {
                   transition={{ duration: 0.35 }}
                   className="demo-answer"
                 >
-                  <p className="demo-note">
-                    Ecco l'handler. Ho aggiunto un filtro sui permessi così l'avviso
-                    arriva solo allo staff:
-                  </p>
-                  <CodeBlock code={turn.code} lang={turn.lang} filename={turn.file} maxHeight={260} />
-                  <p className="demo-note small">{turn.note}</p>
+                  <p className="demo-note">{t.hero.replyNote}</p>
+                  <CodeBlock
+                    code={DEMO_TURN.code}
+                    lang={DEMO_TURN.lang}
+                    filename={DEMO_TURN.file}
+                    maxHeight={260}
+                  />
+                  <p className="demo-note small">{t.hero.demoNote}</p>
                   <div className="demo-actions">
-                    <span className="demo-chip">Copia</span>
-                    <span className="demo-chip accent">{Icon.zip} Scarica ZIP · 2 file</span>
+                    <span className="demo-chip">{t.hero.copy}</span>
+                    <span className="demo-chip accent">{Icon.zip} {t.hero.downloadZip}</span>
                   </div>
                 </motion.div>
               )}
@@ -277,12 +312,13 @@ function DemoReplay() {
 }
 
 function StatItem({ value, suffix, label }: { value: number; suffix: string; label: string }) {
+  const { locale } = useI18n();
   const { ref, visible } = useReveal<HTMLDivElement>({ threshold: 0.4 });
   const n = useCountUp(value, visible);
   return (
     <div className="hero-stat" ref={ref}>
       <span className="hero-stat-num">
-        {n.toLocaleString('it-IT')}
+        {n.toLocaleString(locale)}
         {suffix}
       </span>
       <span className="hero-stat-label">{label}</span>
@@ -291,6 +327,7 @@ function StatItem({ value, suffix, label }: { value: number; suffix: string; lab
 }
 
 function Hero({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) {
+  const { t } = useI18n();
   const reduced = useReducedMotion();
   const ref = useRef<HTMLElement | null>(null);
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] });
@@ -336,56 +373,38 @@ function Hero({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) 
             variants={staggerChild}
           >
             <span className="hero-badge-dot" />
-            Specializzato su Paper, Spigot, Fabric e Forge
+            {t.hero.badge}
             <span className="hero-badge-arrow">{Icon.arrow}</span>
           </motion.a>
 
-          <motion.h1
-            className="hero-title"
-            variants={staggerChild}
-          >
-            Scrivi il plugin.
+          <motion.h1 className="hero-title" variants={staggerChild}>
+            {t.hero.titleA}
             <br />
-            <span className="hero-grad">Non la documentazione.</span>
+            <span className="hero-grad">{t.hero.titleB}</span>
           </motion.h1>
 
-          <motion.p
-            className="hero-sub"
-            variants={staggerChild}
-          >
-            Conosce Bukkit, Paper, Fabric e Forge versione per versione — anche quali
-            metodi sono deprecati e da quando. Gli descrivi il problema in italiano,
-            ti restituisce file interi che compilano. Dallo stack trace alla patch,
-            senza cambiare finestra.
+          <motion.p className="hero-sub" variants={staggerChild}>
+            {t.hero.sub}
           </motion.p>
 
-          <motion.div
-            className="hero-cta"
-            variants={staggerChild}
-          >
+          <motion.div className="hero-cta" variants={staggerChild}>
             <button className="lp-primary-btn lg" onClick={onStart}>
-              Inizia gratis
+              {t.hero.ctaPrimary}
               <span className="btn-arrow">{Icon.arrow}</span>
             </button>
             <button className="lp-outline-btn lg" onClick={onDemo}>
-              {Icon.play} Guarda la demo
+              {Icon.play} {t.hero.ctaSecondary}
             </button>
           </motion.div>
 
-          <motion.p
-            className="hero-fineprint"
-            variants={staggerChild}
-          >
-            Gratis per iniziare · nessuna carta · 15k token ogni 4 ore
+          <motion.p className="hero-fineprint" variants={staggerChild}>
+            {t.hero.fineprint}
           </motion.p>
 
-          <motion.div
-            className="hero-stats"
-            variants={staggerChild}
-          >
-            <StatItem value={1} suffix="M" label="token di contesto" />
-            <StatItem value={40} suffix="+" label="linguaggi supportati" />
-            <StatItem value={12} suffix="" label="versioni MC coperte" />
+          <motion.div className="hero-stats" variants={staggerChild}>
+            <StatItem value={1} suffix="M" label={t.hero.statContext} />
+            <StatItem value={40} suffix="+" label={t.hero.statLangs} />
+            <StatItem value={12} suffix="" label={t.hero.statVersions} />
           </motion.div>
         </motion.div>
 
@@ -409,16 +428,17 @@ function Hero({ onStart, onDemo }: { onStart: () => void; onDemo: () => void }) 
    ===================================================================== */
 
 function LangStrip() {
+  const { t } = useI18n();
   // Duplicata una volta: l'animazione scorre del 50% e il secondo blocco
   // copre il vuoto, dando un ciclo continuo senza salti.
-  const doubled = [...LANGS, ...LANGS];
+  const doubled = [...LANG_KEYS, ...LANG_KEYS];
   return (
-    <div className="lang-strip" aria-label="Linguaggi supportati">
+    <div className="lang-strip" aria-label={t.langs.supported}>
       <div className="lang-track">
-        {doubled.map((l, i) => (
-          <div className="lang-pill" key={i} aria-hidden={i >= LANGS.length}>
-            <span className="lang-name">{l.name}</span>
-            <span className="lang-note">{l.note}</span>
+        {doubled.map((k, i) => (
+          <div className="lang-pill" key={i} aria-hidden={i >= LANG_KEYS.length}>
+            <span className="lang-name">{LANG_LABELS[k]}</span>
+            <span className="lang-note">{t.langs[k]}</span>
           </div>
         ))}
       </div>
@@ -431,27 +451,31 @@ function LangStrip() {
    ===================================================================== */
 
 function Features() {
+  const { t } = useI18n();
   return (
     <section className="lp-section" id="funzioni">
       <div className="lp-container">
         <SectionHead
-          kicker="Cosa sa fare"
-          title={<>Conosce il dominio, <span className="accent-text">non solo il linguaggio</span></>}
-          sub="La differenza fra un assistente generico e uno che ha letto le API: sapere che getTeam() torna null dopo un reload, e dirtelo prima che il server cada."
+          kicker={t.features.kicker}
+          title={splitTitle(t.features.titleA, t.features.titleB)}
+          sub={t.features.sub}
         />
 
         <div className="bento">
-          {FEATURES.map((f, i) => (
-            <Reveal
-              key={f.title}
-              delay={(i % 3) * 0.07}
-              className={`bento-card ${f.span === 'wide' ? 'wide' : ''}`}
-            >
-              <span className="bento-icon">{Icon[f.icon as IconName]}</span>
-              <h3 className="bento-title">{f.title}</h3>
-              <p className="bento-body">{f.body}</p>
-            </Reveal>
-          ))}
+          {t.features.items.map((f, i) => {
+            const meta = FEATURE_META[i];
+            return (
+              <Reveal
+                key={f.title}
+                delay={(i % 3) * 0.07}
+                className={`bento-card ${meta?.span === 'wide' ? 'wide' : ''}`}
+              >
+                <span className="bento-icon">{Icon[(meta?.icon || 'bolt') as IconName]}</span>
+                <h3 className="bento-title">{f.title}</h3>
+                <p className="bento-body">{f.body}</p>
+              </Reveal>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -462,113 +486,25 @@ function Features() {
    DEMO / SHOWCASE
    ===================================================================== */
 
-const SHOWCASE = [
-  {
-    tab: 'Debug',
-    label: 'Dallo stack trace alla causa',
-    prompt: 'Il server crasha quando un giocatore esce. Ecco l\'errore.',
-    code: `// PRIMA — NPE quando il giocatore è già uscito
-@EventHandler
-public void onQuit(PlayerQuitEvent e) {
-    Player p = e.getPlayer();
-    scoreboard.getTeam(p.getName()).removeEntry(p.getName());
-    //             ^^^ getTeam() torna null se il team è stato smontato
-}
-
-// DOPO — controllo esplicito, nessun crash
-@EventHandler
-public void onQuit(PlayerQuitEvent e) {
-    Player p = e.getPlayer();
-    Team team = scoreboard.getTeam(p.getName());
-    if (team != null) {
-        team.removeEntry(p.getName());
-    }
-    cache.remove(p.getUniqueId());  // evita anche il memory leak
-}`,
-    lang: 'java',
-    file: 'QuitListener.java',
-    note: 'Il crash arrivava da `getTeam()` che torna null dopo un reload dello scoreboard. Ho aggiunto anche la pulizia della cache: tenevi l\'oggetto Player in memoria dopo il logout.',
-  },
-  {
-    tab: 'Config',
-    label: 'YAML con validazione',
-    prompt: 'Aggiungi un config.yml per il plugin dei kit, con default sensati.',
-    code: `# config.yml — ricaricabile a caldo con /kit reload
-settings:
-  cooldown-seconds: 86400      # 24h; 0 = nessun cooldown
-  broadcast-on-claim: true
-  sound: ENTITY_PLAYER_LEVELUP
-
-kits:
-  starter:
-    permission: kit.starter
-    cooldown-override: 0       # una tantum
-    items:
-      - material: STONE_SWORD
-        amount: 1
-        enchants: { DAMAGE_ALL: 1 }
-      - material: BREAD
-        amount: 16
-  vip:
-    permission: kit.vip
-    items:
-      - material: DIAMOND_SWORD
-        name: "&bLama del VIP"
-        enchants: { DAMAGE_ALL: 3, DURABILITY: 2 }`,
-    lang: 'yaml',
-    file: 'config.yml',
-    note: 'I `cooldown-override` a livello di kit vincono su quello globale. Ho lasciato i commenti in italiano perché li leggerà chi gestisce il server, non chi scrive il codice.',
-  },
-  {
-    tab: 'Ottimizzazione',
-    label: 'Query fuori dal main thread',
-    prompt: 'Questo listener fa lag spike a ogni join. Perché?',
-    code: `// Il problema: query SQL sul thread principale a ogni join.
-// A 40 player connessi = 40 blocchi del tick loop.
-
-@EventHandler
-public void onJoin(PlayerJoinEvent event) {
-    Player player = event.getPlayer();
-
-    // Async: la query esce dal main thread
-    CompletableFuture
-        .supplyAsync(() -> stats.load(player.getUniqueId()), dbPool)
-        .thenAcceptAsync(data -> {
-            // Rientro sul main thread SOLO per toccare l'API di Bukkit
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) return;   // uscito nel frattempo
-                scoreboard.render(player, data);
-            });
-        })
-        .exceptionally(err -> {
-            plugin.getLogger().warning("Stats non caricate: " + err.getMessage());
-            return null;
-        });
-}`,
-    lang: 'java',
-    file: 'JoinListener.java',
-    note: 'Regola d\'oro: l\'I/O va in async, le chiamate all\'API di Bukkit tornano sul main thread. Il controllo `isOnline()` evita di scrivere su un giocatore già uscito.',
-  },
-];
-
 function Showcase() {
+  const { t } = useI18n();
   const [tab, setTab] = useState(0);
-  const item = SHOWCASE[tab];
+  const src = SHOWCASE_SOURCES[tab];
 
   return (
     <section className="lp-section alt" id="demo">
       <div className="lp-container">
         <SectionHead
-          kicker="In azione"
-          title={<>Tre problemi veri, <span className="accent-text">tre risposte</span></>}
-          sub="Nessuno di questi è uno snippet costruito per la vetrina. Sono i casi che capitano davvero gestendo un server, con il codice che ne esce."
+          kicker={t.showcase.kicker}
+          title={splitTitle(t.showcase.titleA, t.showcase.titleB)}
+          sub={t.showcase.sub}
         />
 
         <Reveal className="showcase">
           <div className="showcase-tabs" role="tablist">
-            {SHOWCASE.map((s, i) => (
+            {t.showcase.tabs.map((label, i) => (
               <button
-                key={s.tab}
+                key={label}
                 role="tab"
                 aria-selected={tab === i}
                 className={tab === i ? 'showcase-tab on' : 'showcase-tab'}
@@ -581,7 +517,7 @@ function Showcase() {
                     transition={springSnappy}
                   />
                 )}
-                <span className="showcase-tab-label">{s.tab}</span>
+                <span className="showcase-tab-label">{label}</span>
               </button>
             ))}
           </div>
@@ -599,14 +535,14 @@ function Showcase() {
               transition={tEnter}
             >
               <div className="showcase-prompt">
-                <span className="showcase-you">Tu</span>
-                <p>{item.prompt}</p>
+                <span className="showcase-you">{t.showcase.you}</span>
+                <p>{t.showcase.prompts[tab]}</p>
               </div>
-              <div className="showcase-label">{item.label}</div>
-              <CodeBlock code={item.code} lang={item.lang} filename={item.file} maxHeight={420} />
+              <div className="showcase-label">{t.showcase.labels[tab]}</div>
+              <CodeBlock code={src.code} lang={src.lang} filename={src.file} maxHeight={420} />
               <p className="showcase-note">
                 <span className="showcase-k">K</span>
-                {item.note}
+                {t.showcase.notes[tab]}
               </p>
             </motion.div>
           </div>
@@ -621,20 +557,21 @@ function Showcase() {
    ===================================================================== */
 
 function HowItWorks() {
+  const { t } = useI18n();
   return (
     <section className="lp-section" id="come-funziona">
       <div className="lp-container">
         <SectionHead
-          kicker="Come funziona"
-          title={<>Dalla frase al file, <span className="accent-text">in tre passi</span></>}
+          kicker={t.how.kicker}
+          title={splitTitle(t.how.titleA, t.how.titleB)}
         />
         <div className="steps">
-          {STEPS.map((s, i) => (
-            <Reveal key={s.n} delay={i * 0.12} className="step">
-              <span className="step-n">{s.n}</span>
+          {t.how.steps.map((s, i) => (
+            <Reveal key={s.title} delay={i * 0.12} className="step">
+              <span className="step-n">{String(i + 1).padStart(2, '0')}</span>
               <h3 className="step-title">{s.title}</h3>
               <p className="step-body">{s.body}</p>
-              {i < STEPS.length - 1 && <span className="step-line" aria-hidden="true" />}
+              {i < t.how.steps.length - 1 && <span className="step-line" aria-hidden="true" />}
             </Reveal>
           ))}
         </div>
@@ -648,6 +585,7 @@ function HowItWorks() {
    ===================================================================== */
 
 function Pricing({ onStart }: { onStart: () => void }) {
+  const { t } = useI18n();
   const [annual, setAnnual] = useState(false);
   const [showTeams, setShowTeams] = useState(false);
 
@@ -658,30 +596,33 @@ function Pricing({ onStart }: { onStart: () => void }) {
     return annual ? String(Math.round((m * 10) / 12)) : monthly;
   };
 
+  const desc = t.pricing.planDesc as Record<string, string>;
+  const bullets = t.pricing.planHighlights as Record<string, string[]>;
+
   return (
     <section className="lp-section alt" id="prezzi">
       <div className="lp-container">
         <SectionHead
-          kicker="Prezzi"
-          title={<>Paghi i token, <span className="accent-text">non le postazioni</span></>}
-          sub="Ogni piano ti dà un tot di token ogni 4 ore, e allo scadere la finestra si ricarica per intero. Nessun vincolo di durata: cambi o disdici quando vuoi."
+          kicker={t.pricing.kicker}
+          title={splitTitle(t.pricing.titleA, t.pricing.titleB)}
+          sub={t.pricing.sub}
         />
 
         <Reveal className="price-toggles">
           <div className="billing-switch">
             <button className={!annual ? 'on' : ''} onClick={() => setAnnual(false)}>
-              Mensile
+              {t.pricing.monthly}
             </button>
             <button className={annual ? 'on' : ''} onClick={() => setAnnual(true)}>
-              Annuale <span className="save-badge">−17%</span>
+              {t.pricing.yearly} <span className="save-badge">−17%</span>
             </button>
           </div>
           <div className="billing-switch">
             <button className={!showTeams ? 'on' : ''} onClick={() => setShowTeams(false)}>
-              Individuale
+              {t.pricing.individual}
             </button>
             <button className={showTeams ? 'on' : ''} onClick={() => setShowTeams(true)}>
-              Team
+              {t.pricing.team}
             </button>
           </div>
         </Reveal>
@@ -701,35 +642,35 @@ function Pricing({ onStart }: { onStart: () => void }) {
                   key={p.id}
                   className={`price-card ${p.id === 'pro' ? 'featured' : ''}`}
                 >
-                  {p.id === 'pro' && <span className="price-flag">Il più scelto</span>}
+                  {p.id === 'pro' && <span className="price-flag">{t.pricing.mostChosen}</span>}
                   <h3 className="price-name">{p.name}</h3>
                   <div className="price-amount">
                     {p.id === 'free' ? (
-                      <b>Gratis</b>
+                      <b>{t.pricing.free}</b>
                     ) : (
                       <>
                         <span className="cur">€</span>
                         <b>{priceOf(p.price)}</b>
-                        <span className="per">/mese</span>
+                        <span className="per">{t.pricing.perMonth}</span>
                       </>
                     )}
                   </div>
                   {annual && p.id !== 'free' && (
                     <span className="price-annual-note">
-                      fatturati {Number(p.price) * 10}€ all'anno
+                      {t.pricing.billedYearly(Number(p.price) * 10)}
                     </span>
                   )}
-                  <p className="price-desc">{p.desc}</p>
+                  <p className="price-desc">{desc[p.id]}</p>
                   <ul className="price-feats">
                     <li>
                       <span className="pf-check">{Icon.check}</span>
-                      <b>{fmtTokens(p.cap4h)}</b> token ogni 4 ore
+                      <b>{fmtTokens(p.cap4h)}</b> {t.pricing.tokensEvery4h}
                     </li>
                     <li>
                       <span className="pf-check">{Icon.check}</span>
-                      {p.week ? `Tetto settimanale ${fmtTokens(p.week)}` : 'Nessun tetto settimanale'}
+                      {p.week ? t.pricing.weeklyCap(fmtTokens(p.week)) : t.pricing.noWeeklyCap}
                     </li>
-                    {p.highlights?.map((h) => (
+                    {bullets[p.id]?.map((h) => (
                       <li key={h}>
                         <span className="pf-check">{Icon.check}</span>
                         {h}
@@ -740,7 +681,7 @@ function Pricing({ onStart }: { onStart: () => void }) {
                     className={p.id === 'pro' ? 'lp-primary-btn full' : 'lp-outline-btn full'}
                     onClick={onStart}
                   >
-                    {p.id === 'free' ? 'Inizia gratis' : `Scegli ${p.name}`}
+                    {p.id === 'free' ? t.pricing.startFree : t.pricing.choose(p.name)}
                   </button>
                 </div>
               ))}
@@ -753,51 +694,53 @@ function Pricing({ onStart }: { onStart: () => void }) {
               animate={{ opacity: 1, y: 0 }}
               transition={tEnter}
             >
-              {TEAMS.map((t) => (
+              {TEAMS.map((team) => (
                 <div
-                  key={t.id}
-                  className={`price-card ${t.id === 'team_medium' ? 'featured' : ''}`}
+                  key={team.id}
+                  className={`price-card ${team.id === 'team_medium' ? 'featured' : ''}`}
                 >
-                  {t.id === 'team_medium' && <span className="price-flag">Consigliato</span>}
-                  <h3 className="price-name">{t.name}</h3>
+                  {team.id === 'team_medium' && (
+                    <span className="price-flag">{t.pricing.recommended}</span>
+                  )}
+                  <h3 className="price-name">{team.name}</h3>
                   <div className="price-amount">
                     <span className="cur">€</span>
-                    <b>{priceOf(t.price)}</b>
-                    <span className="per">/mese</span>
+                    <b>{priceOf(team.price)}</b>
+                    <span className="per">{t.pricing.perMonth}</span>
                   </div>
                   {annual && (
                     <span className="price-annual-note">
-                      fatturati {Number(t.price) * 10}€ all'anno
+                      {t.pricing.billedYearly(Number(team.price) * 10)}
                     </span>
                   )}
-                  <p className="price-desc">{t.desc}</p>
+                  <p className="price-desc">{desc[team.id]}</p>
                   <ul className="price-feats">
                     <li>
                       <span className="pf-check">{Icon.check}</span>
-                      <b>{fmtTokens(t.cap4h)}</b> token ogni 4 ore
+                      <b>{fmtTokens(team.cap4h)}</b> {t.pricing.tokensEvery4h}
                     </li>
                     <li>
                       <span className="pf-check">{Icon.check}</span>
-                      <b>{t.seats}</b> postazioni incluse
+                      <b>{team.seats}</b> {t.pricing.seats}
                     </li>
                     <li>
                       <span className="pf-check">{Icon.check}</span>
-                      Nessun tetto settimanale
+                      {t.pricing.noWeeklyCap}
                     </li>
                     <li>
                       <span className="pf-check">{Icon.check}</span>
-                      Fatturazione unica
+                      {t.pricing.oneInvoice}
                     </li>
                     <li>
                       <span className="pf-check">{Icon.check}</span>
-                      Supporto dedicato
+                      {t.pricing.prioritySupport}
                     </li>
                   </ul>
                   <button
-                    className={t.id === 'team_medium' ? 'lp-primary-btn full' : 'lp-outline-btn full'}
+                    className={team.id === 'team_medium' ? 'lp-primary-btn full' : 'lp-outline-btn full'}
                     onClick={onStart}
                   >
-                    Scegli {t.name}
+                    {t.pricing.choose(team.name)}
                   </button>
                 </div>
               ))}
@@ -805,10 +748,7 @@ function Pricing({ onStart }: { onStart: () => void }) {
           )}
         </div>
 
-        <Reveal className="price-footnote">
-          Tutti i piani includono analisi immagini, export ZIP, cronologia delle
-          conversazioni e i tre temi dell'interfaccia. Nessun vincolo di durata.
-        </Reveal>
+        <Reveal className="price-footnote">{t.pricing.footnote}</Reveal>
       </div>
     </section>
   );
@@ -819,27 +759,31 @@ function Pricing({ onStart }: { onStart: () => void }) {
    ===================================================================== */
 
 function Testimonials() {
+  const { t } = useI18n();
   return (
     <section className="lp-section">
       <div className="lp-container">
         <SectionHead
-          kicker="Chi lo usa"
-          title={<>Sviluppatori, admin, <span className="accent-text">network interi</span></>}
+          kicker={t.testimonials.kicker}
+          title={splitTitle(t.testimonials.titleA, t.testimonials.titleB)}
         />
         <div className="quotes">
-          {TESTIMONIALS.map((t, i) => (
-            <Reveal key={t.name} delay={(i % 2) * 0.1} className="quote-card">
-              <span className="quote-mark" aria-hidden="true">"</span>
-              <p className="quote-text">{t.quote}</p>
-              <div className="quote-author">
-                <span className="quote-av">{t.initials}</span>
-                <span className="quote-meta">
-                  <b>{t.name}</b>
-                  <em>{t.role}</em>
-                </span>
-              </div>
-            </Reveal>
-          ))}
+          {t.testimonials.items.map((q, i) => {
+            const who = TESTIMONIAL_PEOPLE[i];
+            return (
+              <Reveal key={who.name} delay={(i % 2) * 0.1} className="quote-card">
+                <span className="quote-mark" aria-hidden="true">"</span>
+                <p className="quote-text">{q.quote}</p>
+                <div className="quote-author">
+                  <span className="quote-av">{who.initials}</span>
+                  <span className="quote-meta">
+                    <b>{who.name}</b>
+                    <em>{q.role}</em>
+                  </span>
+                </div>
+              </Reveal>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -851,16 +795,17 @@ function Testimonials() {
    ===================================================================== */
 
 function Faq() {
+  const { t } = useI18n();
   const [open, setOpen] = useState<number | null>(0);
   return (
     <section className="lp-section alt" id="domande">
       <div className="lp-container narrow">
         <SectionHead
-          kicker="Domande"
-          title={<>Le cose che <span className="accent-text">chiedono tutti</span></>}
+          kicker={t.faq.kicker}
+          title={splitTitle(t.faq.titleA, t.faq.titleB)}
         />
         <div className="faq-list">
-          {FAQS.map((f, i) => {
+          {t.faq.items.map((f, i) => {
             const isOpen = open === i;
             return (
               <Reveal key={f.q} delay={i * 0.04} className={isOpen ? 'faq-item open' : 'faq-item'}>
@@ -905,6 +850,7 @@ function Faq() {
    ===================================================================== */
 
 function FinalCta({ onStart }: { onStart: () => void }) {
+  const { t } = useI18n();
   return (
     <section className="lp-cta-section">
       <div className="lp-cta-bg" aria-hidden="true">
@@ -920,19 +866,16 @@ function FinalCta({ onStart }: { onStart: () => void }) {
         />
       </div>
       <Reveal className="lp-cta-inner">
-        <span className="kicker light">Pronto?</span>
+        <span className="kicker light">{t.cta.kicker}</span>
         <h2 className="lp-cta-title">
-          Il prossimo plugin lo scrivi
+          {t.cta.titleA}
           <br />
-          <span className="hero-grad">in un pomeriggio.</span>
+          <span className="hero-grad">{t.cta.titleB}</span>
         </h2>
-        <p className="lp-cta-sub">
-          Piano gratuito attivo subito, senza carta. Nel peggiore dei casi ci hai
-          perso il tempo di scrivere una email.
-        </p>
+        <p className="lp-cta-sub">{t.cta.sub}</p>
         <div className="lp-cta-actions">
           <button className="lp-primary-btn lg" onClick={onStart}>
-            Crea il tuo account
+            {t.cta.button}
             <span className="btn-arrow">{Icon.arrow}</span>
           </button>
         </div>
@@ -942,7 +885,11 @@ function FinalCta({ onStart }: { onStart: () => void }) {
 }
 
 function Footer({ onStart }: { onStart: () => void }) {
+  const { t } = useI18n();
   const year = new Date().getFullYear();
+  const jump = (id: string) =>
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+
   return (
     <footer className="lp-footer">
       <div className="lp-container">
@@ -952,38 +899,36 @@ function Footer({ onStart }: { onStart: () => void }) {
               <span className="lp-logo-mark">K</span>
               <span className="lp-logo-text">K AI <em>Code</em></span>
             </button>
-            <p>
-              Assistente di programmazione per sviluppatori Minecraft e non solo.
-              Plugin, mod, script e debugging in ogni linguaggio.
-            </p>
+            <p>{t.footer.about}</p>
+            <LanguageSwitcher compact />
           </div>
 
           <div className="footer-col">
-            <h4>Prodotto</h4>
-            <button onClick={() => document.getElementById('funzioni')?.scrollIntoView({ behavior: 'smooth' })}>Funzioni</button>
-            <button onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}>Demo</button>
-            <button onClick={() => document.getElementById('prezzi')?.scrollIntoView({ behavior: 'smooth' })}>Prezzi</button>
-            <button onClick={onStart}>Accedi</button>
+            <h4>{t.footer.product}</h4>
+            <button onClick={() => jump('funzioni')}>{t.nav.features}</button>
+            <button onClick={() => jump('demo')}>{t.nav.demo}</button>
+            <button onClick={() => jump('prezzi')}>{t.nav.pricing}</button>
+            <button onClick={onStart}>{t.nav.login}</button>
           </div>
 
           <div className="footer-col">
-            <h4>Risorse</h4>
-            <button onClick={() => document.getElementById('come-funziona')?.scrollIntoView({ behavior: 'smooth' })}>Come funziona</button>
-            <button onClick={() => document.getElementById('domande')?.scrollIntoView({ behavior: 'smooth' })}>Domande frequenti</button>
-            <button onClick={() => document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' })}>Esempi di codice</button>
+            <h4>{t.footer.resources}</h4>
+            <button onClick={() => jump('come-funziona')}>{t.nav.how}</button>
+            <button onClick={() => jump('domande')}>{t.nav.faq}</button>
+            <button onClick={() => jump('demo')}>{t.footer.codeExamples}</button>
           </div>
 
           <div className="footer-col">
-            <h4>Inizia</h4>
-            <button className="footer-cta" onClick={onStart}>Crea account gratis</button>
-            <span className="footer-note">15k token ogni 4 ore, senza carta.</span>
+            <h4>{t.footer.getStarted}</h4>
+            <button className="footer-cta" onClick={onStart}>{t.footer.createAccount}</button>
+            <span className="footer-note">{t.footer.note}</span>
           </div>
         </div>
 
         <div className="footer-bottom">
           <span>© {year} K AI Code</span>
           <span className="footer-dot">·</span>
-          <span>Fatto per chi sviluppa su Minecraft</span>
+          <span>{t.footer.madeFor}</span>
         </div>
       </div>
     </footer>
@@ -1002,6 +947,7 @@ function Footer({ onStart }: { onStart: () => void }) {
 const DemoPlayer = lazy(() => import('@/components/demo/DemoPlayer'));
 
 function VideoModal({ onClose }: { onClose: () => void }) {
+  const { t } = useI18n();
   useLockBodyScroll(true);
 
   return (
@@ -1021,8 +967,8 @@ function VideoModal({ onClose }: { onClose: () => void }) {
         exit={{ opacity: 0, scale: 0.97, y: 10 }}
         transition={springSnappy}
       >
-        <button className="modal-close" onClick={onClose} aria-label="Chiudi">×</button>
-        <Suspense fallback={<div className="dm-loading" aria-label="Caricamento della demo" />}>
+        <button className="modal-close" onClick={onClose} aria-label={t.common.close}>×</button>
+        <Suspense fallback={<div className="dm-loading" aria-label={t.demoPlayer.loading} />}>
           <DemoPlayer onClose={onClose} />
         </Suspense>
       </motion.div>
@@ -1035,6 +981,7 @@ function VideoModal({ onClose }: { onClose: () => void }) {
    ===================================================================== */
 
 export default function Landing({ onStart }: { onStart: () => void }) {
+  const { t } = useI18n();
   const [video, setVideo] = useState(false);
 
   // La classe `landing-mode` su <html> la imposta App: averla anche qui
@@ -1046,7 +993,7 @@ export default function Landing({ onStart }: { onStart: () => void }) {
 
   return (
     <div className="lp">
-      <a className="skip-link" href="#funzioni">Vai al contenuto</a>
+      <a className="skip-link" href="#funzioni">{t.common.skipToContent}</a>
       <Nav onStart={onStart} onDemo={openDemo} />
       <main>
         <Hero onStart={onStart} onDemo={openDemo} />

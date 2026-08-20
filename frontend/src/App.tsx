@@ -7,6 +7,8 @@ import { CommandPalette } from '@/components/ui/command-palette';
 import type { Command } from '@/components/ui/command-palette';
 import { useToast } from '@/components/ui/toast';
 import { PLANS, TEAMS, PLAN_NAMES, FLAVOR_ACCENT } from '@/lib/plans';
+import { useI18n, LOCALE_LIST, LOCALES } from '@/lib/i18n';
+import { LanguageSwitcher } from '@/components/ui/language-switcher';
 
 // La landing è un blocco grosso e indipendente: caricarla a richiesta tiene
 // leggero il bundle iniziale per chi è già loggato e va dritto in chat.
@@ -88,27 +90,20 @@ function downloadFile(name, content) {
   saveBlob(new Blob([content], { type: 'text/plain;charset=utf-8' }), name);
 }
 
-const EXAMPLES = [
-  'Porta questo plugin da Spigot a Paper 1.21',
-  'Mod Fabric: aggiungi un minerale custom',
-  'Perche ottengo NullPointerException qui?',
-  'Script Python per backup automatici del server',
-];
-
 function fmtTokens(n) {
   if (n == null) return '—';
   if (n >= 1000000) return (n / 1000000).toFixed(n % 1000000 ? 1 : 0) + 'M';
   if (n >= 1000) return Math.round(n / 1000) + 'k';
   return String(n);
 }
-function fmtReset(resetAt) {
+function fmtReset(resetAt, soon = "") {
   const ms = Math.max(0, (resetAt || 0) - Date.now());
   const h = Math.floor(ms / 3600000);
   const m = Math.floor((ms % 3600000) / 60000);
   if (h >= 24) { const d = Math.floor(h / 24); return `${d}g ${h % 24}h`; }
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m`;
-  return 'a breve';
+  return soon;
 }
 
 const I = {
@@ -190,7 +185,7 @@ function Content({ text, streaming }) {
  * quando resta inutilizzato e il primo risveglio può richiedere decine di
  * secondi.
  */
-async function postJson(url, body, ms = 45000) {
+async function postJson(url, body, ms = 45000, errs: { timeout?: string; unreachable?: string } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
   try {
@@ -202,14 +197,14 @@ async function postJson(url, body, ms = 45000) {
     });
     let data: any = {};
     try { data = await res.json(); } catch { /* risposta senza corpo */ }
-    if (!res.ok) throw new Error(data.error || `Errore ${res.status}`);
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
   } catch (e) {
     if (e?.name === 'AbortError') {
-      throw new Error('Il server non ha risposto in tempo. Riprova tra qualche istante.');
+      throw new Error(errs.timeout || `timeout ${ms}ms`);
     }
     if (e instanceof TypeError) {
-      throw new Error('Non riesco a raggiungere il server. Controlla la connessione.');
+      throw new Error(errs.unreachable || `network: ${url}`);
     }
     throw e;
   } finally {
@@ -218,6 +213,7 @@ async function postJson(url, body, ms = 45000) {
 }
 
 function Auth({ onAuth, onBack }) {
+  const { t } = useI18n();
   const toast = useToast();
   const [mode, setMode] = useState('login');
   const [step, setStep] = useState('form');
@@ -247,6 +243,9 @@ function Auth({ onAuth, onBack }) {
 
   const canStart = !loading && email.trim() !== '' && password !== '';
   const canVerify = !loading && code.length === 6;
+  // Le due diagnosi di rete servono a `postJson`, che vive fuori dal
+  // componente e non può leggere il dizionario da sé.
+  const netErrs = { timeout: t.auth.timeout, unreachable: t.auth.unreachable };
 
   const start = async () => {
     // La stessa guardia del bottone: Invio non deve poterla scavalcare,
@@ -256,9 +255,9 @@ function Auth({ onAuth, onBack }) {
     setErr(''); setLoading(true); beginWait();
     try {
       const ep = mode === 'login' ? 'login/start' : 'register/start';
-      await postJson(`${API}/auth/${ep}`, { email: email.trim(), password });
+      await postJson(`${API}/auth/${ep}`, { email: email.trim(), password }, 45000, netErrs);
       setStep('code'); setCode('');
-      toast.success('Codice inviato', `Controlla la casella di ${email.trim()}.`);
+      toast.success(t.auth.codeSent, t.auth.checkInbox(email.trim()));
     } catch (e) { setErr(e.message); }
     endWait();
   };
@@ -268,7 +267,7 @@ function Auth({ onAuth, onBack }) {
     setErr(''); setLoading(true); beginWait();
     try {
       const ep = mode === 'login' ? 'login/verify' : 'register/verify';
-      const data = await postJson(`${API}/auth/${ep}`, { email: email.trim(), code });
+      const data = await postJson(`${API}/auth/${ep}`, { email: email.trim(), code }, 45000, netErrs);
       localStorage.setItem('token', data.token);
       endWait();
       onAuth(data.token);
@@ -291,8 +290,10 @@ function Auth({ onAuth, onBack }) {
       <motion.button className="auth-back" onClick={onBack}
         initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.25 }}
         whileHover={{ x: -3 }}>
-        {I.back} Torna al sito
+        {I.back} {t.auth.backToSite}
       </motion.button>
+
+      <div className="auth-lang"><LanguageSwitcher /></div>
 
       <div className="auth-card">
         <div className="auth-top">
@@ -311,56 +312,56 @@ function Auth({ onAuth, onBack }) {
           {step === 'form' ? (
             <motion.div key="form" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}>
               <p className="auth-lead">
-                {mode === 'login'
-                  ? 'Bentornato. Accedi per riprendere le tue conversazioni.'
-                  : 'Crea un account: piano Free attivo subito, senza carta di credito.'}
+                {mode === 'login' ? t.auth.welcomeBack : t.auth.createIntro}
               </p>
               <label className="field">
-                <span className="lbl">Email</span>
-                <input type="email" autoComplete="email" placeholder="dev@server.net" value={email}
+                <span className="lbl">{t.auth.email}</span>
+                <input type="email" autoComplete="email" placeholder={t.auth.emailPlaceholder} value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); start(); } }} />
               </label>
               <label className="field">
-                <span className="lbl">Password</span>
+                <span className="lbl">{t.auth.password}</span>
                 <div className="field-pw">
                   <input type={showPassword ? 'text' : 'password'}
                     autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                    placeholder="La tua password" value={password}
+                    placeholder={t.auth.passwordPlaceholder} value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); start(); } }} />
                   <button type="button" className="field-pw-toggle" onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? 'Nascondi password' : 'Mostra password'} tabIndex={-1}>
+                    aria-label={showPassword ? t.auth.hidePassword : t.auth.showPassword} tabIndex={-1}>
                     {showPassword ? I.eyeOff : I.eye}
                   </button>
                 </div>
               </label>
               {err && <p className="err">{err}</p>}
               <button className="btn" style={{ marginTop: 6 }} onClick={start} disabled={!canStart}>
-                {loading ? 'Attendi…' : mode === 'login' ? 'Accedi' : 'Crea account'}
+                {loading ? t.auth.waiting : mode === 'login' ? t.auth.signIn : t.auth.createAccount}
               </button>
-              {slow && <p className="auth-wait">Il server si sta riavviando, può richiedere fino a un minuto…</p>}
+              {slow && <p className="auth-wait">{t.auth.serverWaking}</p>}
               <div><button className="link" onClick={switchMode}>
-                {mode === 'login' ? 'Non hai un account? Registrati' : 'Hai gia un account? Accedi'}
+                {mode === 'login' ? t.auth.noAccount : t.auth.haveAccount}
               </button></div>
             </motion.div>
           ) : (
             <motion.div key="code" initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}>
-              <p className="auth-lead">Ti abbiamo inviato un codice a 6 cifre a <b>{email}</b>. Inseriscilo per {mode === 'login' ? 'accedere' : 'completare la registrazione'}.</p>
+              <p className="auth-lead">
+                {mode === 'login' ? t.auth.codeIntroLogin : t.auth.codeIntroSignup} <b>{email}</b>.
+              </p>
               <label className="field">
-                <span className="lbl">Codice di verifica</span>
+                <span className="lbl">{t.auth.codeLabel}</span>
                 <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="123456" value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); verify(); } }} />
               </label>
               {err && <p className="err">{err}</p>}
               <button className="btn" style={{ marginTop: 6 }} onClick={verify} disabled={!canVerify}>
-                {loading ? 'Verifico…' : 'Verifica'}
+                {loading ? t.auth.verifying : t.auth.verify}
               </button>
-              {slow && <p className="auth-wait">Il server si sta riavviando, può richiedere fino a un minuto…</p>}
+              {slow && <p className="auth-wait">{t.auth.serverWaking}</p>}
               <div style={{ display: 'flex', gap: 14 }}>
-                <button className="link" onClick={() => { setStep('form'); setErr(''); }}>Indietro</button>
-                <button className="link" onClick={start} disabled={loading}>Rinvia codice</button>
+                <button className="link" onClick={() => { setStep('form'); setErr(''); }}>{t.auth.back}</button>
+                <button className="link" onClick={start} disabled={loading}>{t.auth.resend}</button>
               </div>
             </motion.div>
           )}
@@ -375,17 +376,18 @@ function Auth({ onAuth, onBack }) {
    ===================================================================== */
 
 function UsageBar({ label, used, cap, resetAt, sub }) {
+  const { t } = useI18n();
   const pct = cap ? Math.min((used / cap) * 100, 100) : 0;
   const warn = pct > 80;
   return (
     <div className="tok-card">
       <div className="tok-top">
         <span className="tok-label">{label}</span>
-        <span className="tok-reset">reset tra {fmtReset(resetAt)}</span>
+        <span className="tok-reset">{t.usage.resetIn(fmtReset(resetAt, t.common.soon))}</span>
       </div>
       <div className="tok-nums">
         <span className="tok-used">{fmtTokens(used)}</span>
-        <span className="tok-cap">/ {fmtTokens(cap)} token</span>
+        <span className="tok-cap">/ {fmtTokens(cap)} {t.usage.tokens}</span>
       </div>
       <div className={`tok-bar ${warn ? 'warn' : ''}`}><div style={{ width: `${pct}%` }} /></div>
       {sub && <span className="tok-sub">{sub}</span>}
@@ -394,6 +396,7 @@ function UsageBar({ label, used, cap, resetAt, sub }) {
 }
 
 function UsageView({ user, onUpgrade }) {
+  const { t } = useI18n();
   if (!user || !user.usage) return <div className="usage-view" />;
   const { day, week } = user.usage;
   const planId = user.usage.plan || user.plan;
@@ -401,52 +404,52 @@ function UsageView({ user, onUpgrade }) {
   return (
     <div className="usage-view">
       <div className="u-top">
-        <span className="t">Uso</span>
-        <span className="sub">Piano {PLAN_NAMES[planId] || planId}</span>
-        <span className="right"><span className="pill">Token · K AI</span></span>
+        <span className="t">{t.usage.title}</span>
+        <span className="sub">{t.usage.planLabel(PLAN_NAMES[planId] || planId)}</span>
+        <span className="right"><span className="pill">{t.usage.tokens} · K AI</span></span>
       </div>
       <div className="u-body">
         <div className="tok-grid">
-          <UsageBar label="Finestra corrente (4h)" used={day.used} cap={day.cap} resetAt={day.resetAt}
-            sub="Si resetta ogni 4 ore" />
+          <UsageBar label={t.usage.currentWindow} used={day.used} cap={day.cap} resetAt={day.resetAt}
+            sub={t.usage.resetsEvery4h} />
           {week
-            ? <UsageBar label="Tetto settimanale" used={week.used} cap={week.cap} resetAt={week.resetAt}
-                sub="Solo Free e Starter" />
+            ? <UsageBar label={t.usage.weeklyCapTitle} used={week.used} cap={week.cap} resetAt={week.resetAt}
+                sub={t.usage.onlyFreeStarter} />
             : <div className="tok-card ghost">
-                <div className="tok-top"><span className="tok-label">Tetto settimanale</span></div>
-                <div className="tok-nofree">Nessun tetto settimanale</div>
-                <span className="tok-sub">Il tuo piano è limitato solo dalla finestra di 4 ore</span>
+                <div className="tok-top"><span className="tok-label">{t.usage.weeklyCapTitle}</span></div>
+                <div className="tok-nofree">{t.usage.noWeeklyCap}</div>
+                <span className="tok-sub">{t.usage.noWeeklyCapBody}</span>
               </div>}
         </div>
 
-        <div className="plans-h">Scegli il tuo piano</div>
+        <div className="plans-h">{t.usage.choosePlan}</div>
         <motion.div className="plan-grid" initial="hidden" animate="show"
           variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}>
           {PLANS.map((p) => {
             const isCur = p.id === planId;
             const feat = [
-              `${fmtTokens(p.cap4h)} token ogni 4h`,
-              p.week ? `Tetto settimanale ${fmtTokens(p.week)}` : 'Nessun tetto settimanale',
-              'Modello K AI · immagini · ZIP',
+              `${fmtTokens(p.cap4h)} ${t.pricing.tokensEvery4h}`,
+              p.week ? t.pricing.weeklyCap(fmtTokens(p.week)) : t.pricing.noWeeklyCap,
+              t.usage.modelImagesZip,
             ];
             return (
               <motion.div className={`plan-tile ${isCur ? 'cur' : ''} ${p.id === 'pro' ? 'featured' : ''}`} key={p.id}
                 variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
                 transition={{ type: 'spring', stiffness: 280, damping: 28 }}>
-                {p.id === 'pro' && <span className="plan-flag">Consigliato</span>}
+                {p.id === 'pro' && <span className="plan-flag">{t.pricing.recommended}</span>}
                 <div className="pt-name">{p.name}</div>
                 {p.id === 'free'
-                  ? <div className="pt-price"><b>Gratis</b></div>
-                  : <div className="pt-price"><b>{p.price}</b><span>€ / mese</span></div>}
-                <div className="pt-desc">{p.desc}</div>
+                  ? <div className="pt-price"><b>{t.pricing.free}</b></div>
+                  : <div className="pt-price"><b>{p.price}</b><span>€ {t.pricing.perMonth}</span></div>}
+                <div className="pt-desc">{(t.pricing.planDesc as Record<string, string>)[p.id]}</div>
                 <ul className="pt-feats">
                   {feat.map((f) => <li key={f}>{f}</li>)}
                 </ul>
                 {p.id === 'free'
-                  ? <button className="pt-btn cur" disabled>{isCur ? 'Piano attuale' : 'Piano base gratuito'}</button>
+                  ? <button className="pt-btn cur" disabled>{isCur ? t.usage.currentPlan : t.usage.freeBase}</button>
                   : isCur
-                  ? <button className="pt-btn cur" disabled>Piano attuale</button>
-                  : <button className="pt-btn" onClick={() => onUpgrade(p.id)}>Passa a {p.name}</button>}
+                  ? <button className="pt-btn cur" disabled>{t.usage.currentPlan}</button>
+                  : <button className="pt-btn" onClick={() => onUpgrade(p.id)}>{t.usage.switchTo(p.name)}</button>}
               </motion.div>
             );
           })}
@@ -455,32 +458,32 @@ function UsageView({ user, onUpgrade }) {
         <div className="team-sec">
           <div className="team-head">
             <div>
-              <span className="tb-flag">Per team & network</span>
-              <div className="team-title">Piani Team</div>
-              <p className="team-sub">Molti più token dell'Enterprise, condivisi tra il team. Fatturazione unica, da 3 a 10 postazioni in base al piano.</p>
+              <span className="tb-flag">{t.usage.forTeams}</span>
+              <div className="team-title">{t.usage.teamPlans}</div>
+              <p className="team-sub">{t.usage.teamSub}</p>
             </div>
           </div>
           <motion.div className="team-grid" initial="hidden" animate="show"
             variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}>
-            {TEAMS.map((t) => {
-              const isCur = t.id === planId;
+            {TEAMS.map((team) => {
+              const isCur = team.id === planId;
               return (
-                <motion.div className={`team-tile ${isCur ? 'cur' : ''} ${t.id === 'team_medium' ? 'featured' : ''}`} key={t.id}
+                <motion.div className={`team-tile ${isCur ? 'cur' : ''} ${team.id === 'team_medium' ? 'featured' : ''}`} key={team.id}
                   variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
                   transition={{ type: 'spring', stiffness: 280, damping: 28 }}>
-                  {t.id === 'team_medium' && <span className="plan-flag">Più scelto</span>}
-                  <div className="pt-name">{t.name}</div>
-                  <div className="pt-price"><b>{t.price}</b><span>€ / mese</span></div>
-                  <div className="pt-desc">{t.desc}</div>
+                  {team.id === 'team_medium' && <span className="plan-flag">{t.pricing.mostChosen}</span>}
+                  <div className="pt-name">{team.name}</div>
+                  <div className="pt-price"><b>{team.price}</b><span>€ {t.pricing.perMonth}</span></div>
+                  <div className="pt-desc">{(t.pricing.planDesc as Record<string, string>)[team.id]}</div>
                   <ul className="pt-feats">
-                    <li>{fmtTokens(t.cap4h)} token ogni 4h</li>
-                    <li>Nessun tetto settimanale</li>
-                    <li>{t.seats} postazioni incluse</li>
-                    <li>Fatturazione unica · supporto dedicato</li>
+                    <li>{fmtTokens(team.cap4h)} {t.pricing.tokensEvery4h}</li>
+                    <li>{t.pricing.noWeeklyCap}</li>
+                    <li>{team.seats} {t.pricing.seats}</li>
+                    <li>{t.pricing.oneInvoice} · {t.pricing.prioritySupport}</li>
                   </ul>
                   {isCur
-                    ? <button className="pt-btn cur" disabled>Piano attuale</button>
-                    : <button className="pt-btn" onClick={() => onUpgrade(t.id)}>Passa a {t.name}</button>}
+                    ? <button className="pt-btn cur" disabled>{t.usage.currentPlan}</button>
+                    : <button className="pt-btn" onClick={() => onUpgrade(team.id)}>{t.usage.switchTo(team.name)}</button>}
                 </motion.div>
               );
             })}
@@ -495,17 +498,23 @@ function UsageView({ user, onUpgrade }) {
    IMPOSTAZIONI
    ===================================================================== */
 
+/** Solo i campioni di colore: nome e descrizione vengono dal dizionario. */
 const THEME_CARDS = [
-  { id: 'elegant', name: 'Elegante scuro', desc: 'Raffinato e minimale', sw: ['#12151c', '#5ad6c0', '#e6ad55'] },
-  { id: 'vivid', name: 'Moderno colorato', desc: 'Accenti vivaci, chiaro', sw: ['#f6f4ef', '#0d9488', '#7c5cff'] },
-  { id: 'terminal', name: 'Tech / Terminale', desc: 'Mono, da sviluppatori', sw: ['#0a0f0c', '#3ff0a0', '#1f9d63'] },
-];
+  { id: 'elegant', sw: ['#12151c', '#5ad6c0', '#e6ad55'] },
+  { id: 'vivid', sw: ['#f6f4ef', '#0d9488', '#7c5cff'] },
+  { id: 'terminal', sw: ['#0a0f0c', '#3ff0a0', '#1f9d63'] },
+] as const;
 
 function SettingsView({ user, prefs, onChange, onGoUsage, onDeleteAccount, onLogout }) {
+  const { t, locale } = useI18n();
   const [section, setSection] = useState('generale');
   if (!user) return <div className="settings-view" />;
   const set = (patch) => onChange({ ...prefs, ...patch });
-  const SECTIONS = [['generale', 'Generale'], ['account', 'Account'], ['fatturazione', 'Fatturazione'], ['utilizzo', 'Utilizzo'], ['privacy', 'Privacy'], ['funzionalita', 'Funzionalita']];
+  const SECTIONS = [
+    ['generale', t.settings.general], ['account', t.settings.account],
+    ['fatturazione', t.settings.billing], ['utilizzo', t.settings.usage],
+    ['privacy', t.settings.privacy], ['funzionalita', t.settings.features],
+  ];
   const title = (SECTIONS.find((s) => s[0] === section) || SECTIONS[0])[1];
   const day = user.usage?.day;
   const week = user.usage?.week;
@@ -514,7 +523,7 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onDeleteAccount, onLog
   return (
     <div className="settings-view">
       <div className="set-nav">
-        <div className="h">Impostazioni</div>
+        <div className="h">{t.settings.title}</div>
         <div className="items">
           {SECTIONS.map(([id, label]) => (
             <button key={id} className={`item ${section === id ? 'active' : ''}`} onClick={() => setSection(id)}>{label}</button>
@@ -527,100 +536,117 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onDeleteAccount, onLog
           <div className="set-inner">
 
             {section === 'generale' && (<>
-              <div className="set-sec-h">Profilo</div>
-              <div className="frow"><div className="flabel">Avatar</div><div className="avatar-lg">{av}</div></div>
-              <div className="frow"><div className="flabel">Nome completo</div>
-                <input className="finput" value={prefs.name || ''} placeholder="Il tuo nome" onChange={(e) => set({ name: e.target.value })} /></div>
-              <div className="frow"><div className="flabel">Come vuoi che K AI ti chiami?</div>
-                <input className="finput" value={prefs.callme || ''} placeholder="Come preferisci" onChange={(e) => set({ callme: e.target.value })} /></div>
-              <div className="frow"><div className="flabel">Che lavoro fai?</div>
-                <input className="finput" value={prefs.work || ''} placeholder="Es: admin di server Minecraft" onChange={(e) => set({ work: e.target.value })} /></div>
+              <div className="set-sec-h">{t.settings.profile}</div>
+              <div className="frow"><div className="flabel">{t.settings.avatar}</div><div className="avatar-lg">{av}</div></div>
+              <div className="frow"><div className="flabel">{t.settings.fullName}</div>
+                <input className="finput" value={prefs.name || ''} placeholder={t.settings.namePlaceholder} onChange={(e) => set({ name: e.target.value })} /></div>
+              <div className="frow"><div className="flabel">{t.settings.callYou}</div>
+                <input className="finput" value={prefs.callme || ''} placeholder={t.settings.callYouPlaceholder} onChange={(e) => set({ callme: e.target.value })} /></div>
+              <div className="frow"><div className="flabel">{t.settings.yourWork}</div>
+                <input className="finput" value={prefs.work || ''} placeholder={t.settings.workPlaceholder} onChange={(e) => set({ work: e.target.value })} /></div>
               <div className="fcol">
-                <div className="flabel">Istruzioni per K AI</div>
-                <div className="fhelp">K AI ne terra conto in ogni conversazione.</div>
-                <textarea className="set-ta" value={prefs.instructions || ''} placeholder="Es: codice per Paper 1.21, commenti in italiano." onChange={(e) => set({ instructions: e.target.value })} />
+                <div className="flabel">{t.settings.instructions}</div>
+                <div className="fhelp">{t.settings.instructionsHelp}</div>
+                <textarea className="set-ta" value={prefs.instructions || ''} placeholder={t.settings.instructionsPlaceholder} onChange={(e) => set({ instructions: e.target.value })} />
               </div>
 
-              <div className="set-sec-h" style={{ marginTop: 10 }}>Tema</div>
-              <div className="fhelp" style={{ marginTop: -6 }}>Scegli l'aspetto dell'interfaccia.</div>
+              <div className="set-sec-h" style={{ marginTop: 10 }}>{t.settings.interfaceLanguage}</div>
+              <div className="fhelp" style={{ marginTop: -6 }}>{t.settings.interfaceLanguageHelp}</div>
+              <div className="frow">
+                <div className="flabel">{LOCALES[locale].label}</div>
+                <LanguageSwitcher />
+              </div>
+
+              <div className="set-sec-h" style={{ marginTop: 10 }}>{t.settings.theme}</div>
+              <div className="fhelp" style={{ marginTop: -6 }}>{t.settings.themeHelp}</div>
               <div className="theme-picker">
-                {THEME_CARDS.map(({ id, name, desc, sw }) => (
+                {THEME_CARDS.map(({ id, sw }) => (
                   <button key={id} className={`theme-card ${(prefs.flavor || 'elegant') === id ? 'on' : ''}`} onClick={() => set({ flavor: id })}>
                     <div className="tc-swatch">{sw.map((c, i) => <span key={i} style={{ background: c }} />)}</div>
-                    <div className="tc-meta"><span className="tc-name">{name}</span><span className="tc-desc">{desc}</span></div>
+                    <div className="tc-meta">
+                      <span className="tc-name">{t.settings.themes[id].name}</span>
+                      <span className="tc-desc">{t.settings.themes[id].desc}</span>
+                    </div>
                     <span className="tc-check">{(prefs.flavor || 'elegant') === id ? '✓' : ''}</span>
                   </button>
                 ))}
               </div>
-              <div className="frow"><div className="flabel">Carattere della chat</div>
+              <div className="frow"><div className="flabel">{t.settings.chatFont}</div>
                 <select className="fselect" value={prefs.font || 'system'} onChange={(e) => set({ font: e.target.value })}>
-                  <option value="system">Sistema</option>
-                  <option value="mono">Monospace</option>
+                  <option value="system">{t.settings.fontSystem}</option>
+                  <option value="mono">{t.settings.fontMono}</option>
                 </select>
               </div>
             </>)}
 
             {section === 'account' && (
               <div className="set-block">
-                <div className="lead"><span className="lt">Account</span><span className="ld">Il tuo profilo K AI Code.</span></div>
-                <div className="kv"><span className="k2">Email</span><span className="v2">{user.email}</span></div>
-                <div className="kv"><span className="k2">Piano</span><span className="v2">{PLAN_NAMES[user.plan] || user.plan}</span></div>
-                <div style={{ display: 'flex', gap: 8 }}><button className="btn-line" onClick={onLogout}>Esci</button></div>
+                <div className="lead"><span className="lt">{t.settings.account}</span><span className="ld">{t.settings.accountLead}</span></div>
+                <div className="kv"><span className="k2">{t.auth.email}</span><span className="v2">{user.email}</span></div>
+                <div className="kv"><span className="k2">{t.settings.plan}</span><span className="v2">{PLAN_NAMES[user.plan] || user.plan}</span></div>
+                <div style={{ display: 'flex', gap: 8 }}><button className="btn-line" onClick={onLogout}>{t.settings.signOut}</button></div>
               </div>
             )}
 
             {section === 'fatturazione' && (
               <div className="set-block">
-                <div className="lead"><span className="lt">Fatturazione</span><span className="ld">Piano e pagamento.</span></div>
-                <div className="kv"><span className="k2">Piano</span><span className="v2">{PLAN_NAMES[user.plan] || user.plan}</span></div>
+                <div className="lead"><span className="lt">{t.settings.billing}</span><span className="ld">{t.settings.billingLead}</span></div>
+                <div className="kv"><span className="k2">{t.settings.plan}</span><span className="v2">{PLAN_NAMES[user.plan] || user.plan}</span></div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn-ink" onClick={onGoUsage}>Scegli / cambia piano</button>
-                  <button className="btn-line" onClick={onGoUsage}>Vedi uso</button>
+                  <button className="btn-ink" onClick={onGoUsage}>{t.settings.choosePlan}</button>
+                  <button className="btn-line" onClick={onGoUsage}>{t.settings.seeUsage}</button>
                 </div>
               </div>
             )}
 
             {section === 'utilizzo' && (
               <div className="set-block">
-                <div className="lead"><span className="lt">Utilizzo</span><span className="ld">Consumo a token del tuo piano.</span></div>
+                <div className="lead"><span className="lt">{t.settings.usage}</span><span className="ld">{t.settings.usageLead}</span></div>
                 {day && (<>
-                  <div className="kv"><span className="k2">Finestra 4h</span><span className="v2">{fmtTokens(day.used)} / {fmtTokens(day.cap)} token</span></div>
+                  <div className="kv"><span className="k2">{t.settings.window4h}</span><span className="v2">{fmtTokens(day.used)} / {fmtTokens(day.cap)} {t.usage.tokens}</span></div>
                   <div className={`usage-bar ${dayPct > 80 ? 'warn' : ''}`} style={{ maxWidth: 360 }}><div style={{ width: `${dayPct}%` }} /></div>
-                  <div className="kv"><span className="k2">Reset 4h</span><span className="v2">tra {fmtReset(day.resetAt)}</span></div>
+                  <div className="kv"><span className="k2">{t.settings.reset4h}</span><span className="v2">{fmtReset(day.resetAt, t.common.soon)}</span></div>
                 </>)}
                 {week && (
-                  <div className="kv"><span className="k2">Settimanale</span><span className="v2">{fmtTokens(week.used)} / {fmtTokens(week.cap)} · reset tra {fmtReset(week.resetAt)}</span></div>
+                  <div className="kv"><span className="k2">{t.settings.weekly}</span><span className="v2">{fmtTokens(week.used)} / {fmtTokens(week.cap)} · {t.usage.resetIn(fmtReset(week.resetAt, t.common.soon))}</span></div>
                 )}
-                <div><button className="btn-line" onClick={onGoUsage}>Apri pagina Uso</button></div>
+                <div><button className="btn-line" onClick={onGoUsage}>{t.settings.openUsage}</button></div>
               </div>
             )}
 
             {section === 'privacy' && (<>
               <div className="set-block">
-                <div className="lead"><span className="lt">Dati</span><span className="ld">Le conversazioni sono salvate per darti la cronologia.</span></div>
-                <button className="btn-line" style={{ alignSelf: 'flex-start' }} onClick={onLogout}>Esci da questo dispositivo</button>
+                <div className="lead"><span className="lt">{t.settings.dataTitle}</span><span className="ld">{t.settings.dataBody}</span></div>
+                <button className="btn-line" style={{ alignSelf: 'flex-start' }} onClick={onLogout}>{t.settings.signOutDevice}</button>
               </div>
               <div className="set-block">
-                <div className="lead"><span className="lt">Elimina account</span><span className="ld">Rimuove account, conversazioni e messaggi. Irreversibile.</span></div>
-                <button className="danger" onClick={onDeleteAccount}>Elimina account</button>
+                <div className="lead"><span className="lt">{t.settings.deleteAccount}</span><span className="ld">{t.settings.deleteAccountBody}</span></div>
+                <button className="danger" onClick={onDeleteAccount}>{t.settings.deleteAccount}</button>
               </div>
             </>)}
 
             {section === 'funzionalita' && (<>
               <div className="set-block">
-                <div className="lead"><span className="lt">Stile risposte</span><span className="ld">Come K AI struttura le risposte.</span></div>
+                <div className="lead"><span className="lt">{t.settings.replyStyle}</span><span className="ld">{t.settings.replyStyleBody}</span></div>
                 <div className="segment">
-                  {['conciso', 'bilanciato', 'dettagliato'].map((v) => (
-                    <button key={v} className={prefs.style === v ? 'on' : ''} onClick={() => set({ style: v })}>{v[0].toUpperCase() + v.slice(1)}</button>
+                  {([['conciso', t.settings.styles.concise], ['bilanciato', t.settings.styles.balanced], ['dettagliato', t.settings.styles.detailed]] as const).map(([v, label]) => (
+                    <button key={v} className={prefs.style === v ? 'on' : ''} onClick={() => set({ style: v })}>{label}</button>
                   ))}
                 </div>
               </div>
               <div className="set-block">
-                <div className="lead"><span className="lt">Lingua</span><span className="ld">In quale lingua rispondere.</span></div>
-                <div className="segment">
-                  <button className={prefs.lang === 'it' ? 'on' : ''} onClick={() => set({ lang: 'it' })}>Italiano</button>
-                  <button className={prefs.lang === 'en' ? 'on' : ''} onClick={() => set({ lang: 'en' })}>English</button>
-                  <button className={prefs.lang === 'auto' ? 'on' : ''} onClick={() => set({ lang: 'auto' })}>Auto</button>
+                <div className="lead"><span className="lt">{t.settings.replyLanguage}</span><span className="ld">{t.settings.replyLanguageBody}</span></div>
+                {/* "Come l'interfaccia" è il default: chi non tocca nulla si
+                    ritrova risposte nella lingua in cui sta leggendo il sito. */}
+                <div className="segment wrap">
+                  <button className={!prefs.lang || prefs.lang === 'auto' ? 'on' : ''} onClick={() => set({ lang: 'auto' })}>
+                    {t.settings.sameAsInterface}
+                  </button>
+                  {LOCALE_LIST.map((l) => (
+                    <button key={l} className={prefs.lang === l ? 'on' : ''} onClick={() => set({ lang: l })}>
+                      {LOCALES[l].label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </>)}
@@ -637,6 +663,7 @@ function SettingsView({ user, prefs, onChange, onGoUsage, onDeleteAccount, onLog
    ===================================================================== */
 
 function AiActions({ content, onRegenerate, canRegenerate }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const files = useMemo(() => extractCodeFiles(content), [content]);
 
@@ -649,16 +676,16 @@ function AiActions({ content, onRegenerate, canRegenerate }) {
   return (
     <div className="ai-actions">
       <button className={copied ? 'act-chip on' : 'act-chip'} onClick={copy}>
-        {copied ? I.check : I.copy} {copied ? 'Copiato' : 'Copia'}
+        {copied ? I.check : I.copy} {copied ? t.chat.copied : t.chat.copy}
       </button>
       {files.length > 0 && (
         <button className="act-chip zip" onClick={() => downloadZip(files)}>
-          {I.zip} Scarica ZIP · {files.length} file
+          {I.zip} {t.chat.downloadZip(files.length)}
         </button>
       )}
       {canRegenerate && (
-        <button className="act-chip" onClick={onRegenerate} title="Rigenera la risposta">
-          {I.retry} Rigenera
+        <button className="act-chip" onClick={onRegenerate} title={t.chat.regenerate}>
+          {I.retry} {t.chat.regenerate}
         </button>
       )}
     </div>
@@ -670,6 +697,7 @@ function AiActions({ content, onRegenerate, canRegenerate }) {
    ===================================================================== */
 
 function Chat({ token, onLogout }) {
+  const { t, locale } = useI18n();
   const toast = useToast();
   const [user, setUser] = useState(null);
   const [sessionId, setSessionId] = useState(null);
@@ -702,7 +730,10 @@ function Chat({ token, onLogout }) {
   const taRef = useRef(null);
 
   const [prefs, setPrefsState] = useState(() => {
-    const def = { style: 'bilanciato', lang: 'it', instructions: '', name: '', callme: '', work: '', flavor: 'elegant', font: 'system' };
+    // `lang: 'auto'` significa "come l'interfaccia", che a sua volta viene
+    // dalla lingua del browser: chi apre il sito in tedesco riceve risposte in
+    // tedesco senza toccare niente.
+    const def = { style: 'bilanciato', lang: 'auto', instructions: '', name: '', callme: '', work: '', flavor: 'elegant', font: 'system' };
     try { return { ...def, ...JSON.parse(localStorage.getItem('kai_prefs') || '{}') }; }
     catch { return def; }
   });
@@ -784,12 +815,12 @@ function Chat({ token, onLogout }) {
     const empty = sessions.find((s) => s.empty);
     if (empty) { setSessionId(empty.id); setMessages([]); setView('chat'); return; }
     try {
-      const res = await fetch(`${API}/chat/new`, { method: 'POST', headers: H, body: JSON.stringify({ title: 'Nuova conversazione' }) });
+      const res = await fetch(`${API}/chat/new`, { method: 'POST', headers: H, body: JSON.stringify({ title: t.chat.newConversation }) });
       const data = await res.json();
       setSessionId(data.sessionId); setMessages([]); setView('chat');
       loadSessions();
     } catch {
-      toast.error('Non riesco a creare la conversazione', 'Controlla la connessione e riprova.');
+      toast.error(t.chat.createFailed, t.chat.createFailedBody);
     }
   };
 
@@ -802,7 +833,7 @@ function Chat({ token, onLogout }) {
       await fetch(`${API}/chat/${id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ title }) });
       loadSessions();
     } catch {
-      toast.error('Rinomina non riuscita', 'Il titolo non è stato salvato.');
+      toast.error(t.chat.renameFailed, t.chat.renameFailedBody);
       loadSessions();
     }
   };
@@ -810,15 +841,15 @@ function Chat({ token, onLogout }) {
   const deleteSession = async (id, e) => {
     e?.stopPropagation();
     const ok = await toast.confirm({
-      title: 'Eliminare questa conversazione?',
-      description: 'I messaggi verranno rimossi definitivamente. L\'operazione non è reversibile.',
-      confirmLabel: 'Elimina',
+      title: t.chat.deleteTitle,
+      description: t.chat.deleteBody,
+      confirmLabel: t.chat.delete,
       danger: true,
     });
     if (!ok) return;
     try { await fetch(`${API}/chat/${id}`, { method: 'DELETE', headers: H }); } catch { /* ignore */ }
     const list = await loadSessions();
-    toast.success('Conversazione eliminata');
+    toast.success(t.chat.deleted);
     if (id === sessionId) {
       const next = list.find((s) => !s.empty) || list[0];
       if (next) openSession(next.id); else newChat();
@@ -833,14 +864,14 @@ function Chat({ token, onLogout }) {
       // Oltre ~4MB la conversione in base64 gonfia la richiesta e spesso
       // il backend la rifiuta: meglio dirlo subito invece di far fallire l'invio.
       if (file.size > 4 * 1024 * 1024) {
-        toast.error('Immagine troppo grande', `${file.name} supera i 4 MB.`);
+        toast.error(t.chat.imageTooLarge, t.chat.imageTooLargeBody(file.name));
         return;
       }
       const reader = new FileReader();
       reader.onload = () => setImages((prev) => [...prev, { name: file.name, dataUrl: reader.result }].slice(0, 6));
       reader.readAsDataURL(file);
     });
-    if (rejected) toast.info('File ignorati', 'Puoi allegare solo immagini.');
+    if (rejected) toast.info(t.chat.filesIgnored, t.chat.onlyImages);
     e.target.value = '';
   };
 
@@ -857,7 +888,7 @@ function Chat({ token, onLogout }) {
       reader.onload = () => setImages((prev) => [...prev, { name: file.name || 'incollata.png', dataUrl: reader.result }].slice(0, 6));
       reader.readAsDataURL(file);
     });
-    toast.info('Immagine allegata', 'Presa dagli appunti.');
+    toast.info(t.chat.imageAttached, t.chat.fromClipboard);
   };
 
   const runSend = async (text, imgUrls, { replaceLast = false } = {}) => {
@@ -880,17 +911,25 @@ function Chat({ token, onLogout }) {
         signal: controller.signal,
         // `regenerate` dice al backend di scartare la risposta precedente
         // invece di salvare di nuovo la stessa domanda.
-        body: JSON.stringify({ sessionId, message: text, prefs, images: imgUrls, regenerate: replaceLast }),
+        // Il backend vuole una lingua concreta: qui `auto` diventa quella
+        // effettivamente in uso nell'interfaccia.
+        body: JSON.stringify({
+          sessionId,
+          message: text,
+          prefs: { ...prefs, lang: !prefs.lang || prefs.lang === 'auto' ? locale : prefs.lang },
+          images: imgUrls,
+          regenerate: replaceLast,
+        }),
       });
 
       if (res.status === 429) {
         const d = await res.json();
         setMessages((m) => { const c = [...m]; c[c.length - 1] = { role: 'assistant', content: d.error }; return c; });
-        toast.error('Limite token raggiunto', 'Attendi il reset della finestra o passa a un piano superiore.');
+        toast.error(t.chat.quotaTitle, t.chat.quotaBody);
         setBusy(false);
         return;
       }
-      if (!res.ok || !res.body) throw new Error('Risposta non valida dal server');
+      if (!res.ok || !res.body) throw new Error(t.chat.badResponse);
 
       const reader = res.body.getReader();
       const dec = new TextDecoder();
@@ -931,7 +970,7 @@ function Chat({ token, onLogout }) {
           c[c.length - 1] = { role: 'assistant', content: '', failed: true };
           return c;
         });
-        toast.error('Connessione interrotta', 'La risposta non è arrivata. Puoi riprovare.');
+        toast.error(t.chat.connectionLost, t.chat.replyNotReceived);
       }
     }
     abortRef.current = null;
@@ -965,17 +1004,17 @@ function Chat({ token, onLogout }) {
       const res = await fetch(`${API}/billing/create-checkout`, { method: 'POST', headers: H, body: JSON.stringify({ plan }) });
       const data = await res.json();
       if (data.url) { window.location.href = data.url; return; }
-      toast.error('Pagamento non disponibile', data.error || `Il server ha risposto ${res.status}.`);
+      toast.error(t.usage.paymentUnavailable, data.error || `HTTP ${res.status}`);
     } catch (e) {
-      toast.error('Errore di connessione', e.message);
+      toast.error(t.usage.connectionError, e.message);
     }
   };
 
   const deleteAccount = async () => {
     const ok = await toast.confirm({
-      title: 'Eliminare definitivamente l\'account?',
-      description: 'Account, conversazioni e messaggi verranno rimossi. Non è possibile annullare.',
-      confirmLabel: 'Elimina tutto',
+      title: t.settings.deleteAccountConfirm,
+      description: t.settings.deleteAccountConfirmBody,
+      confirmLabel: t.settings.deleteAll,
       danger: true,
     });
     if (!ok) return;
@@ -987,28 +1026,29 @@ function Chat({ token, onLogout }) {
   const commands = useMemo(() => {
     const list = [];
     list.push(
-      { id: 'new', group: 'Azioni', title: 'Nuova conversazione', shortcut: 'Ctrl N', icon: I.plus, keywords: 'crea chat nuova', run: newChat },
-      { id: 'usage', group: 'Azioni', title: 'Uso e piani', icon: I.chart, keywords: 'token limiti abbonamento prezzi', run: () => setView('usage') },
-      { id: 'settings', group: 'Azioni', title: 'Impostazioni', icon: I.gear, keywords: 'preferenze tema profilo', run: () => setView('settings') },
-      { id: 'logout', group: 'Azioni', title: 'Esci', icon: I.logout, keywords: 'logout disconnetti', run: onLogout },
+      { id: 'new', group: t.common.actions, title: t.chat.newConversation, shortcut: 'Ctrl N', icon: I.plus, keywords: 'crea chat nuova new', run: newChat },
+      { id: 'usage', group: t.common.actions, title: t.chat.navUsage, icon: I.chart, keywords: 'token limiti abbonamento prezzi usage plans', run: () => setView('usage') },
+      { id: 'settings', group: t.common.actions, title: t.settings.title, icon: I.gear, keywords: 'preferenze tema profilo settings', run: () => setView('settings') },
+      { id: 'logout', group: t.common.actions, title: t.chat.logout, icon: I.logout, keywords: 'logout disconnetti esci', run: onLogout },
     );
     // Cambio tema rapido: è la preferenza che si tocca più spesso
-    [['elegant', 'Elegante scuro'], ['vivid', 'Moderno colorato'], ['terminal', 'Tech / Terminale']].forEach(([id, label]) => {
+    (['elegant', 'vivid', 'terminal'] as const).forEach((id) => {
+      const label = t.settings.themes[id].name;
       list.push({
-        id: 'theme-' + id, group: 'Tema', title: `Tema: ${label}`, icon: I.gear,
-        keywords: 'aspetto colori ' + id,
-        run: () => { setPrefs({ ...prefs, flavor: id }); toast.success('Tema aggiornato', label); },
+        id: 'theme-' + id, group: t.settings.theme, title: `${t.settings.theme}: ${label}`, icon: I.gear,
+        keywords: 'aspetto colori theme ' + id,
+        run: () => { setPrefs({ ...prefs, flavor: id }); toast.success(t.settings.themeUpdated, label); },
       });
     });
     sessions.filter((s) => !s.empty).forEach((s) => {
       list.push({
-        id: 'conv-' + s.id, group: 'Conversazioni', title: s.title || 'Senza titolo',
+        id: 'conv-' + s.id, group: t.chat.conversations, title: s.title || t.chat.untitled,
         icon: I.chat, keywords: s.title || '', run: () => openSession(s.id),
       });
     });
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, prefs]);
+  }, [sessions, prefs, t]);
 
   /* ---- scorciatoie globali ---- */
   useEffect(() => {
@@ -1032,7 +1072,7 @@ function Chat({ token, onLogout }) {
   const atCap = day ? day.used >= day.cap : false;
   const initials = user ? user.email.slice(0, 2).toUpperCase() : 'K';
   const planLabel = user ? (PLAN_NAMES[user.plan] || user.plan) : '';
-  const convTitle = messages.find((m) => m.role === 'user')?.content?.slice(0, 46) || 'Nuova conversazione';
+  const convTitle = messages.find((m) => m.role === 'user')?.content?.slice(0, 46) || t.chat.newConversation;
   const accent = FLAVOR_ACCENT[prefs.flavor] || FLAVOR_ACCENT.elegant;
   const visibleSessions = sessions.filter((s) => !s.empty);
 
@@ -1044,7 +1084,7 @@ function Chat({ token, onLogout }) {
           <div className="nav">
             {['chat', 'usage'].map((v) => (
               <button key={v} className={`ico ${view === v ? 'active' : ''}`} onClick={() => setView(v)}
-                title={v === 'chat' ? 'Chat' : 'Uso e piani'}>
+                title={v === 'chat' ? t.chat.navChat : t.chat.navUsage}>
                 {view === v && (
                   <motion.span layoutId="rail-indicator" className="ico-indicator" transition={{ type: 'spring', stiffness: 500, damping: 35 }} />
                 )}
@@ -1053,7 +1093,7 @@ function Chat({ token, onLogout }) {
             ))}
           </div>
           <div className="foot">
-            <button className={`ico ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')} title="Impostazioni">{I.gear}</button>
+            <button className={`ico ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')} title={t.settings.title}>{I.gear}</button>
             <div className="avatar" title={user?.email}>{initials}</div>
           </div>
         </div>
@@ -1067,21 +1107,21 @@ function Chat({ token, onLogout }) {
         </AnimatePresence>
 
         <div className={sideOpen ? 'side open' : 'side'}>
-          <button className="side-close" onClick={() => setSideOpen(false)} aria-label="Chiudi il menu">×</button>
+          <button className="side-close" onClick={() => setSideOpen(false)} aria-label={t.chat.closeMenu}>×</button>
           <div className="side-head">
             <span className="wordmark">K AI</span>
             <span className="tag">{planLabel}</span>
           </div>
           <div className="side-actions">
-            <button className="new-btn" onClick={newChat}>{I.plus} Nuova conversazione</button>
+            <button className="new-btn" onClick={newChat}>{I.plus} {t.chat.newConversation}</button>
             <button className="search" onClick={() => setPaletteOpen(true)}>
-              {I.search}<span>Cerca</span><span className="kbd">Ctrl K</span>
+              {I.search}<span>{t.chat.search}</span><span className="kbd">Ctrl K</span>
             </button>
           </div>
-          <div className="side-sec">Conversazioni</div>
+          <div className="side-sec">{t.chat.conversations}</div>
           <div className="conv-list">
             {visibleSessions.length === 0 && (
-              <div className="conv-empty">Nessuna conversazione salvata.</div>
+              <div className="conv-empty">{t.chat.noConversations}</div>
             )}
             <AnimatePresence initial={false}>
               {visibleSessions.map((s) => (
@@ -1110,9 +1150,9 @@ function Chat({ token, onLogout }) {
                   ) : (
                     <>
                       <span className="ci-title">{s.title}</span>
-                      <button className="ci-act" title="Rinomina" aria-label="Rinomina"
+                      <button className="ci-act" title={t.chat.rename} aria-label={t.chat.rename}
                         onClick={(e) => { e.stopPropagation(); setRenaming(s.id); }}>{I.edit}</button>
-                      <button className="ci-act ci-del" onClick={(e) => deleteSession(s.id, e)} title="Elimina" aria-label="Elimina">×</button>
+                      <button className="ci-act ci-del" onClick={(e) => deleteSession(s.id, e)} title={t.chat.delete} aria-label={t.chat.delete}>×</button>
                     </>
                   )}
                 </motion.div>
@@ -1121,18 +1161,18 @@ function Chat({ token, onLogout }) {
           </div>
           <div className="side-foot">
             {user && day && (<>
-              <div className="usage-row"><span>Token · finestra 4h</span><b>{fmtTokens(day.used)}/{fmtTokens(day.cap)}</b></div>
+              <div className="usage-row"><span>{t.chat.tokensWindow}</span><b>{fmtTokens(day.used)}/{fmtTokens(day.cap)}</b></div>
               <div className={`usage-bar ${dayPct > 80 ? 'warn' : ''}`}><div style={{ width: `${dayPct}%` }} /></div>
-              <div className="usage-reset">reset tra {fmtReset(day.resetAt)}</div>
-              {atCap && <button className="upg" onClick={() => setView('usage')}>Fai upgrade</button>}
+              <div className="usage-reset">{t.chat.resetIn(fmtReset(day.resetAt, t.common.soon))}</div>
+              {atCap && <button className="upg" onClick={() => setView('usage')}>{t.chat.upgrade}</button>}
             </>)}
-            <button className="logout" onClick={onLogout}>Esci</button>
+            <button className="logout" onClick={onLogout}>{t.chat.logout}</button>
           </div>
         </div>
 
         <div className="main">
           <div className="top">
-            <button className="menu-btn" onClick={() => setSideOpen(true)} aria-label="Apri le conversazioni">
+            <button className="menu-btn" onClick={() => setSideOpen(true)} aria-label={t.chat.openConversations}>
               {I.menu}
             </button>
             <span className="conv">{convTitle}</span>
@@ -1150,11 +1190,11 @@ function Chat({ token, onLogout }) {
                 </div>
                 <motion.div className="welcome" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 26 }}>
                   <div className="k">K</div>
-                  <h2>Cosa costruiamo oggi?</h2>
-                  <p>Plugin, mod, script o debugging in qualsiasi linguaggio. Descrivi il problema come lo racconteresti a un collega.</p>
+                  <h2>{t.chat.welcomeTitle}</h2>
+                  <p>{t.chat.welcomeSub}</p>
                   <motion.div className="chips" initial="hidden" animate="show"
                     variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.15 } } }}>
-                    {EXAMPLES.map((ex) => (
+                    {t.chat.examples.map((ex) => (
                       <motion.button key={ex} className="chip-ex" onClick={() => send(ex)}
                         variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }}
                         transition={{ type: 'spring', stiffness: 300, damping: 26 }}
@@ -1172,7 +1212,7 @@ function Chat({ token, onLogout }) {
                   <motion.div className="turn-user" key={i} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 320, damping: 30 }}>
                     {m.images && m.images.length > 0 && (
                       <div className="u-images">
-                        {m.images.map((src, j) => <img key={j} src={src} alt="allegato" />)}
+                        {m.images.map((src, j) => <img key={j} src={src} alt={t.common.attachment} />)}
                       </div>
                     )}
                     {m.content && <div className="u-bubble">{m.content}</div>}
@@ -1182,13 +1222,13 @@ function Chat({ token, onLogout }) {
                     <div className="ai-head"><span className="k">K</span><span className="meta">K AI</span></div>
                     {m.failed ? (
                       <div className="chat-error">
-                        <span><b>Risposta non ricevuta.</b> La connessione si è interrotta durante la generazione.</span>
-                        <button onClick={regenerate}>Riprova</button>
+                        <span><b>{t.chat.replyFailed}</b> {t.chat.replyFailedBody}</span>
+                        <button onClick={regenerate}>{t.chat.retry}</button>
                       </div>
                     ) : (
                       <>
                         <Content text={m.content} streaming={busy && i === messages.length - 1} />
-                        {m.stopped && <div className="turn-stopped">Risposta interrotta da te.</div>}
+                        {m.stopped && <div className="turn-stopped">{t.chat.stopped}</div>}
                       </>
                     )}
                     {m.content && !busy && (
@@ -1212,7 +1252,7 @@ function Chat({ token, onLogout }) {
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
                   onClick={() => { setAtBottom(true); endRef.current?.scrollIntoView({ behavior: 'smooth' }); }}
                 >
-                  {I.down} Torna in fondo
+                  {I.down} {t.chat.backToBottom}
                 </motion.button>
               )}
             </AnimatePresence>
@@ -1226,7 +1266,7 @@ function Chat({ token, onLogout }) {
                     {images.map((im, idx) => (
                       <div className="thumb" key={idx}>
                         <img src={im.dataUrl} alt={im.name} />
-                        <button className="thumb-del" onClick={() => setImages(images.filter((_, j) => j !== idx))} aria-label="Rimuovi">×</button>
+                        <button className="thumb-del" onClick={() => setImages(images.filter((_, j) => j !== idx))} aria-label={t.common.remove}>×</button>
                       </div>
                     ))}
                   </div>
@@ -1234,7 +1274,7 @@ function Chat({ token, onLogout }) {
                 <textarea
                   ref={taRef}
                   rows={1}
-                  placeholder="Scrivi a K AI…  (incolla pure uno screenshot)"
+                  placeholder={t.chat.placeholder}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onPaste={onPaste}
@@ -1245,24 +1285,26 @@ function Chat({ token, onLogout }) {
                   {/* I chip "Web" e "Tools" erano decorativi: sembravano
                       comandi ma non facevano nulla. Al loro posto un
                       contatore reale degli allegati. */}
-                  <button className="tool" onClick={() => fileRef.current?.click()} title="Allega immagini">{I.image}</button>
+                  <button className="tool" onClick={() => fileRef.current?.click()} title={t.chat.attachImages}>{I.image}</button>
                   {images.length > 0 && (
-                    <span className="tool-chip">{images.length} {images.length === 1 ? 'immagine' : 'immagini'}</span>
+                    <span className="tool-chip">{t.chat.imageCount(images.length)}</span>
                   )}
                   {busy ? (
-                    <button className="send stop" onClick={stopGeneration} title="Interrompi la risposta">
-                      {I.stop} Ferma
+                    <button className="send stop" onClick={stopGeneration} title={t.chat.stop}>
+                      {I.stop} {t.chat.stop}
                     </button>
                   ) : (
                     <button className="send" onClick={() => send()} disabled={!input.trim() && images.length === 0}>
-                      Invia {I.send}
+                      {t.chat.send} {I.send}
                     </button>
                   )}
                 </div>
               </div>
               <div className="composer-meta">
-                <span><span className="kbd-hint">Invio</span> invia · <span className="kbd-hint">Shift+Invio</span> a capo · <span className="kbd-hint">Ctrl K</span> cerca</span>
-                <span>K AI · {fmtTokens(dayLeft)} token nella finestra</span>
+                <span>
+                  <span className="kbd-hint">Enter</span> {t.chat.hintSend} · <span className="kbd-hint">Shift+Enter</span> {t.chat.hintNewline} · <span className="kbd-hint">Ctrl K</span> {t.chat.hintSearch}
+                </span>
+                <span>{t.chat.tokensLeft(fmtTokens(dayLeft))}</span>
               </div>
             </div>
           </div>
@@ -1278,7 +1320,7 @@ function Chat({ token, onLogout }) {
             <motion.div className="modal-window" onClick={(e) => e.stopPropagation()}
               initial={{ opacity: 0, scale: 0.96, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 8 }}
               transition={{ type: 'spring', stiffness: 380, damping: 32 }}>
-              <button className="modal-close" onClick={() => setView('chat')} aria-label="Chiudi">×</button>
+              <button className="modal-close" onClick={() => setView('chat')} aria-label={t.common.close}>×</button>
               {view === 'usage'
                 ? <UsageView user={user} onUpgrade={upgrade} />
                 : <SettingsView user={user} prefs={prefs} onChange={setPrefs} onGoUsage={() => setView('usage')} onDeleteAccount={deleteAccount} onLogout={onLogout} />}
@@ -1295,6 +1337,7 @@ function Chat({ token, onLogout }) {
    ===================================================================== */
 
 export default function App() {
+  const { t } = useI18n();
   const [token, setToken] = useState(() => localStorage.getItem('token'));
   // Chi ha già un token va dritto in chat; gli altri vedono la vetrina.
   const [stage, setStage] = useState(() => (localStorage.getItem('token') ? 'app' : 'landing'));
@@ -1323,7 +1366,7 @@ export default function App() {
       ) : stage === 'auth' ? (
         <Auth onAuth={onAuth} onBack={() => setStage('landing')} />
       ) : (
-        <Suspense fallback={<div className="lp-loading" aria-label="Caricamento" />}>
+        <Suspense fallback={<div className="lp-loading" aria-label={t.common.loading} />}>
           <Landing onStart={() => setStage('auth')} />
         </Suspense>
       )}

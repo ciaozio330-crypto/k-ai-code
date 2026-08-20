@@ -1,6 +1,7 @@
 import { memo, useMemo, useState } from 'react';
 import { tokenizeBlock, langLabel } from '@/lib/highlight';
 import { useCopy } from '@/lib/hooks';
+import { useI18n } from '@/lib/i18n';
 
 interface CodeBlockProps {
   code: string;
@@ -32,6 +33,7 @@ export const CodeBlock = memo(function CodeBlock({
   maxHeight,
   onDownload,
 }: CodeBlockProps) {
+  const { t } = useI18n();
   const { copied, copy } = useCopy();
   const [wrapped, setWrapped] = useState(false);
 
@@ -52,7 +54,7 @@ export const CodeBlock = memo(function CodeBlock({
           <button
             className="code-btn"
             onClick={() => setWrapped((w) => !w)}
-            title={wrapped ? 'Non andare a capo' : 'Vai a capo'}
+            title={wrapped ? t.common.wrapOff : t.common.wrapOn}
             aria-pressed={wrapped}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -61,7 +63,7 @@ export const CodeBlock = memo(function CodeBlock({
             </svg>
           </button>
           {onDownload && (
-            <button className="code-btn" onClick={onDownload} title="Scarica questo file">
+            <button className="code-btn" onClick={onDownload} title={t.common.downloadFile}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
               </svg>
@@ -70,14 +72,14 @@ export const CodeBlock = memo(function CodeBlock({
           <button
             className={copied ? 'code-btn copied' : 'code-btn'}
             onClick={() => copy(code)}
-            title="Copia il codice"
+            title={t.common.copyCode}
           >
             {copied ? (
               <>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
-                Copiato
+                {t.chat.copied}
               </>
             ) : (
               <>
@@ -85,7 +87,7 @@ export const CodeBlock = memo(function CodeBlock({
                   <rect x="9" y="9" width="12" height="12" rx="2.5" />
                   <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                 </svg>
-                Copia
+                {t.chat.copy}
               </>
             )}
           </button>

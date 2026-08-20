@@ -85,6 +85,22 @@ function withHistoryCache(history) {
     : m);
 }
 
+/**
+ * Istruzione di lingua, una per ogni lingua dell'interfaccia.
+ *
+ * I termini tecnici (stack trace, event handler, listener) restano in inglese
+ * in tutte: tradurli è la cosa che fa sembrare sbagliata una risposta a chi
+ * programma, perché nel codice e nella documentazione si chiamano così.
+ */
+const LANG_INSTRUCTION = {
+  it: 'Rispondi sempre in italiano. Lascia in inglese i termini tecnici e i nomi delle API.',
+  en: 'Always respond in English.',
+  es: 'Responde siempre en español. Deja en inglés los términos técnicos y los nombres de las API.',
+  fr: 'Réponds toujours en français. Garde en anglais les termes techniques et les noms des API.',
+  de: 'Antworte immer auf Deutsch. Fachbegriffe und API-Namen bleiben auf Englisch.',
+  pt: 'Responde sempre em português. Mantém em inglês os termos técnicos e os nomes das APIs.',
+};
+
 function buildSystem(prefs) {
   let s = SYSTEM_PROMPT;
   if (prefs) {
@@ -95,8 +111,16 @@ function buildSystem(prefs) {
     if (bits.length) s += '\n' + bits.join(' ');
     if (prefs.style === 'conciso') s += '\nSii conciso: vai dritto al codice, spiegazioni minime.';
     if (prefs.style === 'dettagliato') s += '\nSii dettagliato: spiega le scelte e le alternative.';
-    if (prefs.lang === 'it') s += '\nRispondi sempre in italiano.';
-    if (prefs.lang === 'en') s += '\nAlways respond in English.';
+    // L'istruzione è scritta nella lingua di destinazione: dire "rispondi in
+    // tedesco" in italiano funziona molto meno bene che dirlo in tedesco.
+    // Il frontend manda sempre un codice concreto (risolve lui "auto" nella
+    // lingua dell'interfaccia), ma una lingua non prevista qui non deve
+    // silenziosamente diventare italiano: il ripiego dice il codice ISO.
+    const lang = LANG_INSTRUCTION[prefs.lang];
+    if (lang) s += '\n' + lang;
+    else if (prefs.lang && prefs.lang !== 'auto') {
+      s += `\nAlways respond in the language with IETF tag "${String(prefs.lang).slice(0, 12)}".`;
+    }
     if (prefs.instructions) s += '\nIstruzioni permanenti dell utente: ' + String(prefs.instructions).slice(0, 800);
   }
   return s;

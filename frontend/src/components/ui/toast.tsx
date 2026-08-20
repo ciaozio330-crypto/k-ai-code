@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { useI18n } from '@/lib/i18n';
 
 /**
  * Sistema di notifiche.
@@ -76,6 +77,9 @@ interface ConfirmState {
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  // `t` è già il nome della singola notifica nei cicli qui sotto: il
+  // dizionario prende `tr` per non coprirlo.
+  const { t: tr } = useI18n();
   const [items, setItems] = useState<ToastItem[]>([]);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const nextId = useRef(1);
@@ -110,13 +114,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         setConfirmState({
           title: opts.title,
           description: opts.description,
-          confirmLabel: opts.confirmLabel || 'Conferma',
-          cancelLabel: opts.cancelLabel || 'Annulla',
+          confirmLabel: opts.confirmLabel || tr.common.confirm,
+          cancelLabel: opts.cancelLabel || tr.common.cancel,
           danger: !!opts.danger,
           resolve,
         });
       }),
-  }), [toast, dismiss]);
+  }), [toast, dismiss, tr]);
 
   const closeConfirm = (value: boolean) => {
     confirmState?.resolve(value);
@@ -127,7 +131,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={api}>
       {children}
 
-      <div className="toast-stack" role="region" aria-live="polite" aria-label="Notifiche">
+      <div className="toast-stack" role="region" aria-live="polite" aria-label={tr.common.notifications}>
         <AnimatePresence initial={false}>
           {items.map((t) => (
             <motion.div
@@ -152,7 +156,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   </button>
                 )}
               </div>
-              <button className="toast-x" onClick={() => dismiss(t.id)} aria-label="Chiudi notifica">
+              <button className="toast-x" onClick={() => dismiss(t.id)} aria-label={tr.common.close}>
                 ×
               </button>
             </motion.div>

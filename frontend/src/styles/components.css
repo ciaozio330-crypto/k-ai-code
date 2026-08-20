@@ -845,3 +845,96 @@ html.theme-terminal {
 @media (prefers-reduced-motion: reduce) {
   .auth-wait::before { animation-duration: 2.4s; }
 }
+
+/* =====================================================================
+   SELETTORE DI LINGUA
+   =====================================================================
+   Vive in tre contesti diversi — barra della landing, schermata di accesso
+   e impostazioni — quindi si appoggia ai token del tema invece che a colori
+   fissi. La landing ne ridefinisce solo i colori (vedi landing.css).
+   ================================================================== */
+
+.lang-switch { position: relative; display: inline-flex; }
+
+.lang-switch-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 34px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: transparent; color: var(--text-3);
+  font-size: 12.5px; font-weight: 550; letter-spacing: .02em;
+  cursor: pointer;
+  transition: color .16s, background .16s, border-color .16s;
+}
+.lang-switch-btn:hover { color: var(--text); background: var(--surface-2); border-color: var(--border-strong); }
+.lang-switch-btn svg { opacity: .8; flex: none; }
+.lang-switch-code { font-variant-numeric: tabular-nums; }
+
+.lang-switch.compact .lang-switch-btn { height: 30px; padding: 0 8px; font-size: 12px; }
+
+.lang-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60;
+  min-width: 168px; padding: 5px;
+  list-style: none; margin: 0;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-md, 12px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .28), 0 2px 8px rgba(0, 0, 0, .16);
+}
+/* Nel footer il menu sta in basso: aprirlo verso il basso lo manderebbe
+   fuori dalla pagina, quindi lì esce verso l'alto. */
+.lang-switch.compact .lang-menu { top: auto; bottom: calc(100% + 8px); left: 0; right: auto; }
+
+.lang-opt {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border-radius: 8px;
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--text-2); font-size: 13px; text-align: left;
+  transition: background .14s, color .14s;
+}
+.lang-opt:hover { background: var(--surface-3); color: var(--text); }
+.lang-opt.on { color: var(--text); font-weight: 600; }
+.lang-opt-code {
+  flex: none; width: 26px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: .06em;
+  color: var(--text-4);
+}
+.lang-opt.on .lang-opt-code { color: var(--accent); }
+.lang-opt-label { flex: 1; }
+.lang-opt svg { flex: none; color: var(--accent); }
+
+/* Sette bottoni di lingua non stanno su una riga sola, e il riquadro unico
+   del `segment` andando a capo lascerebbe un vuoto in fondo all'ultima riga.
+   Qui diventano quindi pillole separate, che si dispongono da sole. */
+.segment.wrap {
+  flex-wrap: wrap; gap: 8px;
+  width: 100%; max-width: 520px;
+  border: 0; background: none; overflow: visible;
+}
+.segment.wrap button {
+  flex: 0 0 auto; padding: 8px 15px;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface);
+}
+/* `.segment.wrap button` ha la stessa specificità di `.segment button.on`
+   e viene dopo: senza questa riga il riempimento dello stato attivo verrebbe
+   sovrascritto dallo sfondo neutro, lasciando la voce scelta illeggibile. */
+.segment.wrap button.on {
+  background: var(--btn-fill); color: var(--btn-fill-text);
+  border-color: transparent;
+}
+.segment.wrap button:hover:not(.on) { background: var(--surface-2); }
+
+/* Nella schermata di accesso sta in alto a destra, in pendant col
+   "torna al sito" che occupa l'angolo opposto: stessa pillola, stesso
+   vetro sfocato, altrimenti sembrano due elementi di due pagine diverse. */
+.auth-lang { position: absolute; top: 26px; right: 26px; z-index: 5; }
+.auth-lang .lang-switch-btn {
+  height: 38px; padding: 0 15px; border-radius: 999px;
+  color: #e8ecf3; background: rgba(10, 14, 20, 0.55);
+  border-color: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 20px -8px rgba(0, 0, 0, 0.6);
+}
+.auth-lang .lang-switch-btn:hover {
+  background: rgba(10, 14, 20, 0.72); border-color: rgba(52, 211, 184, .5);
+}
+@media (max-width: 560px) { .auth-lang { top: 18px; right: 16px; } }

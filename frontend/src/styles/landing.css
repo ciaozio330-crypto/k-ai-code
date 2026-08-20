@@ -735,3 +735,15 @@ html.landing-mode #root { height: auto; }
 @media (max-width: 420px) {
   .lp-nav-cta .lp-ghost-btn { display: none; }
 }
+
+/* Il selettore di lingua sulla landing usa la palette scura fissa della
+   vetrina, non quella del tema scelto dall'utente dentro l'app. */
+.lp .lang-switch-btn { border-color: var(--lp-border); color: var(--lp-text-3); }
+.lp .lang-switch-btn:hover { color: var(--lp-text); background: rgba(255,255,255,0.05); border-color: var(--lp-border-2); }
+.lp .lang-menu { background: var(--lp-surface); border-color: var(--lp-border); }
+.lp .lang-opt { color: var(--lp-text-2); }
+.lp .lang-opt:hover { background: var(--lp-surface-2); color: var(--lp-text); }
+.lp .lang-opt.on { color: var(--lp-text); }
+.lp .lang-opt-code { color: var(--lp-text-4); }
+.lp .lang-opt.on .lang-opt-code, .lp .lang-opt svg { color: var(--lp-accent); }
+.footer-brand .lang-switch { margin-top: 16px; }

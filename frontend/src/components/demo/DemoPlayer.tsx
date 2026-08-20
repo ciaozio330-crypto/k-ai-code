@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import KaiIntro, { DEMO_DURATION, SCENES } from './KaiIntro';
+import { useI18n } from '@/lib/i18n';
 
 // Importato qui e non da main.tsx di proposito: così finisce nel chunk della
 // demo insieme ai suoi font, invece di pesare su ogni visita.
@@ -25,10 +26,15 @@ function fmt(s: number) {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
 
-/** Inizio di ogni scena, per i marcatori sulla barra. */
-const MARKS = SCENES.reduce<{ at: number; name: string }[]>((acc, s) => {
+/**
+ * Inizio di ogni scena, per i marcatori sulla barra.
+ *
+ * Solo i tempi: il nome arriva dal dizionario, per indice. SCENES resta la
+ * sorgente delle durate perché è la stessa che pilota l'animazione.
+ */
+const MARKS: { at: number }[] = SCENES.reduce<{ at: number }[]>((acc, _s, i) => {
   const prev = acc.length ? acc[acc.length - 1] : null;
-  acc.push({ at: prev ? prev.at + SCENES[acc.length - 1].dur : 0, name: s.name });
+  acc.push({ at: prev ? prev.at + SCENES[i - 1].dur : 0 });
   return acc;
 }, []);
 
@@ -40,6 +46,7 @@ interface Props {
 }
 
 export default function DemoPlayer({ onClose, autoStart = false }: Props) {
+  const { t, locale } = useI18n();
   const [started, setStarted] = useState(autoStart);
   const [playing, setPlaying] = useState(autoStart);
   const [time, setTime] = useState(0);
@@ -89,16 +96,23 @@ export default function DemoPlayer({ onClose, autoStart = false }: Props) {
   }, [started, time, seek, start, onClose]);
 
   const progress = (time / DEMO_DURATION) * 100;
+  const sceneNames = t.demoPlayer.scenes;
   const currentScene = useMemo(() => {
-    let name = MARKS[0]?.name || '';
-    for (const m of MARKS) if (time + 0.01 >= m.at) name = m.name;
+    let name = sceneNames[0] || '';
+    MARKS.forEach((m, i) => { if (time + 0.01 >= m.at) name = sceneNames[i] || name; });
     return name;
-  }, [time]);
+  }, [time, sceneNames]);
 
   return (
     <div className="dm">
       <div className="dm-viewport">
         <KaiIntro
+          /* L'animazione ha i suoi testi solo in italiano e inglese, con le
+             righe della spiegazione spezzate a mano per stare nel riquadro.
+             Aggiungerci le altre quattro lingue vorrebbe dire rifare quelle
+             interruzioni una per una: fino ad allora, chi non legge in
+             italiano vede la demo in inglese, non in una lingua a caso. */
+          lang={locale === 'it' ? 'IT' : 'EN'}
           playing={started && playing}
           loop
           audio={audio && started}
@@ -118,13 +132,13 @@ export default function DemoPlayer({ onClose, autoStart = false }: Props) {
                 <span className="dm-brand">
                   <span className="dm-brand-mark">K</span>K AI <em>Code</em>
                 </span>
-                <span className="dm-cover-tag">demo dal vivo · {fmt(DEMO_DURATION)}</span>
+                <span className="dm-cover-tag">{t.demoPlayer.liveDemo} · {fmt(DEMO_DURATION)}</span>
               </div>
               <div className="dm-cover-mid">
                 <motion.button
                   className="dm-play"
                   onClick={() => start(0)}
-                  aria-label="Riproduci la demo"
+                  aria-label={t.demoPlayer.play}
                   whileHover={{ scale: 1.06 }}
                   whileTap={{ scale: 0.96 }}
                 >
@@ -133,15 +147,13 @@ export default function DemoPlayer({ onClose, autoStart = false }: Props) {
                     <path d="M8 5.2v13.6L19 12z" fill="currentColor" />
                   </svg>
                 </motion.button>
-                <h2 className="dm-title">Da uno stack trace alla patch</h2>
-                <p className="dm-sub">
-                  Un NullPointerException vero, trovato e corretto. Con musica: alza il volume.
-                </p>
+                <h2 className="dm-title">{t.demoPlayer.title}</h2>
+                <p className="dm-sub">{t.demoPlayer.sub}</p>
               </div>
               <div className="dm-cover-chips">
-                {MARKS.map((m) => (
+                {MARKS.map((m, i) => (
                   <button key={m.at} className="dm-chip" onClick={() => start(m.at)}>
-                    <b>{fmt(m.at)}</b>{m.name}
+                    <b>{fmt(m.at)}</b>{sceneNames[i]}
                   </button>
                 ))}
               </div>
@@ -154,7 +166,7 @@ export default function DemoPlayer({ onClose, autoStart = false }: Props) {
         <button
           className="dm-ctl"
           onClick={() => (started ? setPlaying((p) => !p) : start(0))}
-          aria-label={playing ? 'Pausa' : 'Riproduci'}
+          aria-label={playing ? t.demoPlayer.pause : t.demoPlayer.play}
         >
           {playing ? (
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -172,12 +184,12 @@ export default function DemoPlayer({ onClose, autoStart = false }: Props) {
 
         <div className="dm-track" ref={barRef} onClick={onBarClick} role="presentation">
           <div className="dm-track-fill" style={{ width: `${progress}%` }} />
-          {MARKS.map((m) => (
+          {MARKS.map((m, i) => (
             <span
               key={m.at}
               className="dm-mark"
               style={{ left: `${(m.at / DEMO_DURATION) * 100}%` }}
-              title={m.name}
+              title={sceneNames[i]}
             />
           ))}
         </div>
@@ -189,8 +201,8 @@ export default function DemoPlayer({ onClose, autoStart = false }: Props) {
         <button
           className={audio ? 'dm-ctl' : 'dm-ctl off'}
           onClick={() => setAudio((a) => !a)}
-          aria-label={audio ? 'Disattiva audio' : 'Attiva audio'}
-          title={audio ? 'Disattiva audio (M)' : 'Attiva audio (M)'}
+          aria-label={audio ? t.demoPlayer.muteOn : t.demoPlayer.muteOff}
+          title={`${audio ? t.demoPlayer.muteOn : t.demoPlayer.muteOff} (M)`}
         >
           {audio ? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

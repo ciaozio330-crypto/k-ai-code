@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { ReactNode } from 'react';
+import { useI18n } from '@/lib/i18n';
 
 export interface Command {
   id: string;
@@ -52,6 +53,7 @@ function score(text: string, query: string): number {
 }
 
 export function CommandPalette({ open, onClose, commands }: Props) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -131,7 +133,7 @@ export function CommandPalette({ open, onClose, commands }: Props) {
             className="cmdk"
             role="dialog"
             aria-modal="true"
-            aria-label="Palette comandi"
+            aria-label={t.common.commandPalette}
             onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.97, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -147,8 +149,8 @@ export function CommandPalette({ open, onClose, commands }: Props) {
                 ref={inputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Cerca conversazioni o esegui un'azione…"
-                aria-label="Cerca"
+                placeholder={t.common.searchPlaceholder}
+                aria-label={t.chat.search}
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -157,7 +159,7 @@ export function CommandPalette({ open, onClose, commands }: Props) {
 
             <div className="cmdk-list" ref={listRef}>
               {results.length === 0 ? (
-                <div className="cmdk-empty">Nessun risultato per «{query}»</div>
+                <div className="cmdk-empty">{t.common.noResults(query)}</div>
               ) : (
                 grouped.map(([group, entries]) => (
                   <div key={group}>
@@ -183,9 +185,9 @@ export function CommandPalette({ open, onClose, commands }: Props) {
             </div>
 
             <div className="cmdk-foot">
-              <span className="cmdk-hint"><b>↑</b><b>↓</b> naviga</span>
-              <span className="cmdk-hint"><b>↵</b> apri</span>
-              <span className="cmdk-hint"><b>esc</b> chiudi</span>
+              <span className="cmdk-hint"><b>↑</b><b>↓</b> {t.common.navigate}</span>
+              <span className="cmdk-hint"><b>↵</b> {t.common.open}</span>
+              <span className="cmdk-hint"><b>esc</b> {t.common.close.toLowerCase()}</span>
             </div>
           </motion.div>
         </motion.div>
